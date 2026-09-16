@@ -32,6 +32,7 @@ interface MeResponse {
 
 interface SellerOnboardingStatus {
   sellerId: string;
+  canOperate: boolean;
 }
 
 /** A user only ever holds one role in this system today (each registration flow assigns exactly one), but the field is an array — ADMIN/SELLER take precedence over CUSTOMER only as defensive ordering, not because multi-role users are expected. */
@@ -70,7 +71,11 @@ async function buildSession(
     const status = await apiFetch<SellerOnboardingStatus>(
       "/seller/onboarding/status",
     );
-    return { ...session, sellerId: status?.sellerId };
+    return {
+      ...session,
+      sellerId: status?.sellerId,
+      sellerCanOperate: status?.canOperate,
+    };
   } catch {
     // sellers-service unreachable, or (edge case) a SELLER-role user with no
     // membership row yet — SellerAuthGuard already redirects a session with
@@ -94,6 +99,35 @@ export async function registerCustomer(input: {
       phone: input.phone,
       password: input.password,
     }),
+  });
+}
+
+/** Mirrors identity-service's DocumentType enum (common/types/document-type.ts). */
+export type SellerDocumentType = "CPF" | "CNPJ";
+
+/**
+ * Mirrors identity-service's RegisterSellerDto exactly (auth/dto/register-seller.dto.ts).
+ * This is a two-phase registration on the backend (local User row + a
+ * synchronous handoff to sellers-service that creates Seller(PENDING) +
+ * SellerMembership(OWNER)) — the caller here only sees the combined result,
+ * not the two phases. No auto-login happens; the new seller logs in
+ * separately afterwards, same as customer registration.
+ */
+export async function registerSeller(input: {
+  email: string;
+  password: string;
+  ownerName: string;
+  legalName: string;
+  tradeName: string;
+  documentType: SellerDocumentType;
+  documentNumber: string;
+  storeEmail: string;
+  phone: string;
+  description?: string;
+}): Promise<void> {
+  await apiFetch("/auth/seller/register", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 

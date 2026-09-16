@@ -49,7 +49,9 @@
   color: var(--potala-cream);
 }
 
-.field input {
+.field input,
+.field select,
+.field textarea {
   min-height: 2.85rem;
   padding: 0.65rem 0.8rem;
   border: 1px solid var(--potala-border);
@@ -57,9 +59,17 @@
   background: #f5f0e8;
   color: var(--potala-bg);
   font-size: 0.95rem;
+  font-family: inherit;
 }
 
-.field input:focus-visible {
+.field textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
   outline: 2px solid var(--potala-gold);
   outline-offset: 2px;
 }

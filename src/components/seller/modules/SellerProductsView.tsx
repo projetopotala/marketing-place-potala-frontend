@@ -1,41 +1,81 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useAdminData } from "@/features/admin/context/AdminDataContext";
-import { PRODUCT_STATUS_LABEL } from "@/features/admin/domain/status";
-import type { ProductStatus } from "@/features/admin/domain/types";
-import { formatMoney } from "@/features/admin/utils/currency";
-import { selectSellerProducts } from "@/features/seller/selectors";
-import { useSellerId } from "@/features/seller/useSellerId";
-import { textIncludes } from "@/lib/normalizeText";
+import {
+  listSellerProducts,
+  SELLER_PRODUCT_STATUS_LABEL,
+  totalStock,
+  type SellerProduct,
+} from "@/lib/api/catalog";
+import { ApiError } from "@/lib/api/client";
 import styles from "@/components/seller/seller.module.css";
 
 const PAGE_SIZE = 8;
 
+function formatMoney(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+/**
+ * Lista real via GET /seller/products (catalog-service, através do
+ * gateway). Sem busca por texto nem filtro por status aqui — o backend só
+ * pagina por cursor (PaginationQueryDto: limit/cursor), não tem parâmetro
+ * de busca; filtrar isso exigiria trazer todo o catálogo pro cliente, o que
+ * o endpoint não foi feito para suportar.
+ */
 export function SellerProductsView() {
-  const sellerId = useSellerId();
-  const { db, isHydrated } = useAdminData();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<"all" | ProductStatus>("all");
-  const [page, setPage] = useState(0);
+  const [products, setProducts] = useState<SellerProduct[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Pilha de cursors já vistos, pra permitir "anterior" com uma API que só
+  // oferece nextCursor (cursor-pagination é, por natureza, só pra frente).
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const products = useMemo(() => {
-    if (!sellerId) return [];
-    return selectSellerProducts(db, sellerId)
-      .filter((product) => (status === "all" ? true : product.status === status))
-      .filter(
-        (product) =>
-          textIncludes(product.title, query) ||
-          textIncludes(product.description, query),
+  const loadPage = useCallback(async (cursor: string | null) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const page = await listSellerProducts({ limit: PAGE_SIZE, cursor });
+      setProducts(page.items);
+      setHasNextPage(page.pageInfo.hasNextPage);
+    } catch (err) {
+      setProducts(null);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível carregar os produtos.",
       );
-  }, [db, query, sellerId, status]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const pageCount = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
-  const pageItems = products.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  useEffect(() => {
+    void loadPage(cursorStack[pageIndex] ?? null);
+    // Só a página atual dispara recarga — cursorStack cresce por goNext, não deve reexecutar sozinho.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIndex, loadPage]);
 
-  if (!isHydrated || !sellerId) {
-    return <p role="status">Carregando produtos…</p>;
+  function goNext() {
+    if (!hasNextPage || !products || products.length === 0) return;
+    const nextCursor = products[products.length - 1]?.id ?? null;
+    setCursorStack((stack) => {
+      const next = stack.slice(0, pageIndex + 1);
+      next.push(nextCursor);
+      return next;
+    });
+    setPageIndex((index) => index + 1);
+  }
+
+  function goPrevious() {
+    if (pageIndex === 0) return;
+    setPageIndex((index) => index - 1);
   }
 
   return (
@@ -52,59 +92,28 @@ export function SellerProductsView() {
         <div>
           <h1 className={styles.pageTitle}>Produtos</h1>
           <p className={styles.pageLead}>
-            Gerencie rascunhos e envie para revisão. A aprovação é exclusiva do
-            admin.
+            Seus produtos cadastrados no catálogo, direto do catalog-service.
           </p>
         </div>
-        <Link href="/loja/produtos/novo" className={styles.primaryBtn}>
+        <Link
+          href="/loja/produtos/novo"
+          className={styles.primaryBtn}
+          aria-disabled="true"
+          title="Criar produto ainda não está conectado ao backend real"
+          onClick={(event) => event.preventDefault()}
+        >
           Novo produto
         </Link>
       </header>
 
       <section className={styles.panel}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) 180px",
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <div className={styles.field}>
-            <label htmlFor="seller-product-search">Buscar</label>
-            <input
-              id="seller-product-search"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setPage(0);
-              }}
-              placeholder="Nome ou descrição"
-            />
-          </div>
-          <div className={styles.field}>
-            <label htmlFor="seller-product-status">Status</label>
-            <select
-              id="seller-product-status"
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value as "all" | ProductStatus);
-                setPage(0);
-              }}
-            >
-              <option value="all">Todos</option>
-              {(Object.keys(PRODUCT_STATUS_LABEL) as ProductStatus[]).map(
-                (key) => (
-                  <option key={key} value={key}>
-                    {PRODUCT_STATUS_LABEL[key]}
-                  </option>
-                ),
-              )}
-            </select>
-          </div>
-        </div>
-
-        {pageItems.length === 0 ? (
+        {isLoading ? (
+          <p role="status">Carregando produtos…</p>
+        ) : error ? (
+          <p role="alert" style={{ color: "var(--potala-danger, #c95c57)" }}>
+            {error}
+          </p>
+        ) : !products || products.length === 0 ? (
           <p>Nenhum produto encontrado.</p>
         ) : (
           <div className={styles.tableWrap}>
@@ -118,7 +127,7 @@ export function SellerProductsView() {
                 </tr>
               </thead>
               <tbody>
-                {pageItems.map((product) => (
+                {products.map((product) => (
                   <tr key={product.id}>
                     <td>
                       <Link
@@ -130,10 +139,10 @@ export function SellerProductsView() {
                     </td>
                     <td>
                       <span className={styles.badge}>
-                        {PRODUCT_STATUS_LABEL[product.status]}
+                        {SELLER_PRODUCT_STATUS_LABEL[product.status]}
                       </span>
                     </td>
-                    <td>{product.stock}</td>
+                    <td>{totalStock(product)}</td>
                     <td>{formatMoney(product.priceCents)}</td>
                   </tr>
                 ))}
@@ -153,21 +162,17 @@ export function SellerProductsView() {
           <button
             type="button"
             className={styles.ghostBtn}
-            disabled={page === 0}
-            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            disabled={pageIndex === 0 || isLoading}
+            onClick={goPrevious}
           >
             Anterior
           </button>
-          <span>
-            Página {page + 1} de {pageCount}
-          </span>
+          <span>Página {pageIndex + 1}</span>
           <button
             type="button"
             className={styles.ghostBtn}
-            disabled={page + 1 >= pageCount}
-            onClick={() =>
-              setPage((current) => Math.min(pageCount - 1, current + 1))
-            }
+            disabled={!hasNextPage || isLoading}
+            onClick={goNext}
           >
             Próxima
           </button>

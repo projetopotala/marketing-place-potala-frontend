@@ -6,10 +6,19 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { AccessMode } from "@/types/auth";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
+import { SellerRegisterForm } from "@/components/auth/SellerRegisterForm";
 import styles from "./AccessForm.module.css";
 
 function resolveMode(value: string | null): AccessMode {
-  return value === "cadastro" ? "register" : "login";
+  if (value === "cadastro") return "register";
+  if (value === "cadastro-vendedor") return "register-seller";
+  return "login";
+}
+
+function modeQuery(mode: AccessMode): string | null {
+  if (mode === "register") return "cadastro";
+  if (mode === "register-seller") return "cadastro-vendedor";
+  return null;
 }
 
 export function AccessForm() {
@@ -31,8 +40,8 @@ export function AccessForm() {
   }, [mode]);
 
   function goToMode(next: AccessMode) {
-    const href =
-      next === "register" ? `${pathname}?modo=cadastro` : pathname;
+    const query = modeQuery(next);
+    const href = query ? `${pathname}?modo=${query}` : pathname;
     router.replace(href, { scroll: false });
   }
 
@@ -50,7 +59,7 @@ export function AccessForm() {
     >
       <AnimatePresence mode="wait">
         <motion.div
-          className={`${styles.card} ${mode === "register" ? styles.register : ""}`}
+          className={`${styles.card} ${mode !== "login" ? styles.register : ""}`}
           key={mode}
           initial={reduceMotion ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -66,9 +75,15 @@ export function AccessForm() {
                 setBannerMessage(null);
                 goToMode("register");
               }}
+              onCreateSellerAccount={() => {
+                setBannerMessage(null);
+                goToMode("register-seller");
+              }}
             />
-          ) : (
+          ) : mode === "register" ? (
             <RegisterForm onBackToLogin={handleBackToLogin} />
+          ) : (
+            <SellerRegisterForm onBackToLogin={handleBackToLogin} />
           )}
         </motion.div>
       </AnimatePresence>

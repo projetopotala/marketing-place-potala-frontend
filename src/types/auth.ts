@@ -21,6 +21,15 @@ export interface Session {
    * "not a valid seller session", same as before this integration.
    */
   sellerId?: string;
+  /**
+   * Only present for role "seller", from the same GET /seller/onboarding/status
+   * call that resolves sellerId. `false` means the store is still PENDING
+   * (or rejected/suspended) — catalog-service's own SellerActiveGuard would
+   * reject every /seller/products call with 403 in that case, so
+   * SellerAuthGuard shows a "loja em análise" screen instead of the panel
+   * rather than letting the user hit real 403s from every request.
+   */
+  sellerCanOperate?: boolean;
 }
 
-export type AccessMode = "login" | "register";
+export type AccessMode = "login" | "register" | "register-seller";

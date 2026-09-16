@@ -11,12 +11,14 @@ interface LoginFormProps {
   initialEmail?: string;
   bannerMessage?: string | null;
   onCreateAccount: () => void;
+  onCreateSellerAccount: () => void;
 }
 
 export function LoginForm({
   initialEmail = "",
   bannerMessage = null,
   onCreateAccount,
+  onCreateSellerAccount,
 }: LoginFormProps) {
   const router = useRouter();
   const { signIn } = useAuth();
@@ -139,6 +141,15 @@ export function LoginForm({
       <p className={styles.switchText}>Ainda não tem uma conta?</p>
       <button type="button" className={styles.switchBtn} onClick={onCreateAccount}>
         Criar conta
+      </button>
+
+      <button
+        type="button"
+        className={styles.switchBtn}
+        onClick={onCreateSellerAccount}
+        style={{ marginTop: 4 }}
+      >
+        Quero vender no Instituto Potala
       </button>
     </div>
   );
