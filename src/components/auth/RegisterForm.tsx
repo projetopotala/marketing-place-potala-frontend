@@ -4,6 +4,7 @@ import { useId, useState, type FormEvent } from "react";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { useAuth } from "@/context/AuthContext";
 import { UserIcon } from "@/components/storefront/icons";
+import { MIN_PASSWORD_LENGTH } from "@/types/auth";
 import styles from "./RegisterForm.module.css";
 
 interface RegisterFormProps {
@@ -21,17 +22,20 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
   const [terms, setTerms] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting) return;
+
     const nextErrors: Record<string, string> = {};
 
     if (!name.trim()) nextErrors.name = "Informe seu nome completo.";
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       nextErrors.email = "Informe um e-mail válido.";
     }
-    if (password.length < 6) {
-      nextErrors.password = "A senha deve ter ao menos 6 caracteres.";
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      nextErrors.password = `A senha deve ter ao menos ${MIN_PASSWORD_LENGTH} caracteres.`;
     }
     if (password !== confirmPassword) {
       nextErrors.confirmPassword = "As senhas não coincidem.";
@@ -44,12 +48,14 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
       return;
     }
 
-    const result = signUp({
+    setIsSubmitting(true);
+    const result = await signUp({
       name,
       email,
       phone: phone.trim() || undefined,
       password,
     });
+    setIsSubmitting(false);
 
     if (!result.ok) {
       setStatus(result.error);
@@ -59,7 +65,7 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
     setStatus(null);
     onBackToLogin(
       email.trim().toLowerCase(),
-      "Conta demonstrativa criada. Entre para acessar seu painel.",
+      "Conta criada com sucesso. Entre para acessar seu painel.",
     );
   }
 
@@ -152,8 +158,13 @@ export function RegisterForm({ onBackToLogin }: RegisterFormProps) {
         </label>
         {errors.terms ? <p className={styles.error}>{errors.terms}</p> : null}
 
-        <button type="submit" className={styles.primary}>
-          Criar conta
+        <button
+          type="submit"
+          className={styles.primary}
+          disabled={isSubmitting}
+          aria-busy={isSubmitting}
+        >
+          {isSubmitting ? "Criando conta…" : "Criar conta"}
         </button>
 
         {status ? (

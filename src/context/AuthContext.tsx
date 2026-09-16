@@ -9,228 +9,119 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { DemoSession, DemoUserProfile, UserRole } from "@/types/auth";
-import {
-  DEMO_SESSION_STORAGE_KEY,
-  DEMO_USER_STORAGE_KEY,
-  resolveSellerId,
-  resolveUserRole,
-} from "@/types/auth";
+import type { Session, UserRole } from "@/types/auth";
+import { ApiError } from "@/lib/api/client";
+import * as authApi from "@/lib/api/auth";
 
 interface AuthContextValue {
-  user: DemoSession | null;
+  user: Session | null;
   isAuthenticated: boolean;
+  /** False until the initial GET /auth/me (or a failed attempt at it) resolves — mirrors the old localStorage hydration flag so every existing guard/consumer needs no change. */
   isHydrated: boolean;
   signIn: (input: {
     email: string;
     password: string;
-    remember: boolean;
-  }) => { ok: true; role: UserRole } | { ok: false; error: string };
+  }) => Promise<{ ok: true; role: UserRole } | { ok: false; error: string }>;
   signUp: (input: {
     name: string;
     email: string;
     phone?: string;
     password: string;
-  }) => { ok: true; profile: DemoUserProfile } | { ok: false; error: string };
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => void;
-  getDemoProfile: () => DemoUserProfile | null;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function isDemoProfile(value: unknown): value is DemoUserProfile {
-  if (!value || typeof value !== "object") return false;
-  const profile = value as Record<string, unknown>;
-  return (
-    typeof profile.id === "string" &&
-    typeof profile.name === "string" &&
-    typeof profile.email === "string" &&
-    typeof profile.createdAt === "string"
-  );
-}
-
-function normalizeSession(value: unknown): DemoSession | null {
-  if (!value || typeof value !== "object") return null;
-  const session = value as Record<string, unknown>;
-
-  if (
-    typeof session.userId !== "string" ||
-    typeof session.email !== "string" ||
-    typeof session.name !== "string" ||
-    typeof session.remember !== "boolean" ||
-    typeof session.signedInAt !== "string"
-  ) {
-    return null;
+function loginErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "E-mail ou senha inválidos.";
+    if (error.status === 400) return "Verifique o e-mail e a senha informados.";
+    if (error.status > 0) return error.message;
   }
-
-  const role: UserRole =
-    session.role === "admin" ||
-    session.role === "customer" ||
-    session.role === "seller"
-      ? session.role
-      : resolveUserRole(session.email);
-
-  return {
-    userId: session.userId,
-    email: session.email,
-    name: session.name,
-    role,
-    remember: session.remember,
-    signedInAt: session.signedInAt,
-    sellerId:
-      typeof session.sellerId === "string"
-        ? session.sellerId
-        : resolveSellerId(session.email, role),
-  };
+  return "Não foi possível conectar ao servidor. Tente novamente.";
 }
 
-function readJson(raw: string | null): unknown {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
+function registerErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 409) return "Este e-mail já está cadastrado.";
+    if (error.status === 400) return "Verifique os dados informados.";
+    if (error.status > 0) return error.message;
   }
+  return "Não foi possível conectar ao servidor. Tente novamente.";
 }
 
-function readProfile(): DemoUserProfile | null {
-  if (typeof window === "undefined") return null;
-  const parsed = readJson(window.localStorage.getItem(DEMO_USER_STORAGE_KEY));
-  if (!isDemoProfile(parsed)) return null;
-
-  return {
-    ...parsed,
-    role:
-      parsed.role === "admin" ||
-      parsed.role === "seller" ||
-      parsed.role === "customer"
-        ? parsed.role
-        : resolveUserRole(parsed.email),
-  };
-}
-
-function readSession(): DemoSession | null {
-  if (typeof window === "undefined") return null;
-
-  const fromSession = normalizeSession(
-    readJson(window.sessionStorage.getItem(DEMO_SESSION_STORAGE_KEY)),
-  );
-  if (fromSession) return fromSession;
-
-  return normalizeSession(
-    readJson(window.localStorage.getItem(DEMO_SESSION_STORAGE_KEY)),
-  );
-}
-
-function clearSessionStorage() {
-  window.sessionStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
-  window.localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
-}
-
-/**
- * Autenticação demonstrativa apenas para o protótipo frontend.
- * A proteção real deve ocorrer no backend com sessão segura e cookie httpOnly.
- */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<DemoSession | null>(null);
+  const [user, setUser] = useState<Session | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    Promise.resolve().then(() => {
-      if (cancelled) return;
-      setUser(readSession());
-      setIsHydrated(true);
-    });
+    authApi
+      .getSession()
+      .then((session) => {
+        if (!cancelled) setUser(session);
+      })
+      .catch(() => {
+        // A transient failure (gateway/identity-service unreachable) is
+        // treated the same as "not logged in" here — every guard already
+        // redirects an unauthenticated visitor to /acesso, which is the
+        // right outcome when we genuinely can't confirm a session either
+        // way, rather than leaving the app stuck on a loading state.
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsHydrated(true);
+      });
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const getDemoProfile = useCallback(() => readProfile(), []);
+  const signIn = useCallback(
+    async (input: { email: string; password: string }) => {
+      try {
+        const session = await authApi.login(input);
+        setUser(session);
+        return { ok: true as const, role: session.role };
+      } catch (error) {
+        return { ok: false as const, error: loginErrorMessage(error) };
+      }
+    },
+    [],
+  );
 
   const signUp = useCallback(
-    (input: {
+    async (input: {
       name: string;
       email: string;
       phone?: string;
       password: string;
     }) => {
-      void input.password;
-      void input.phone;
-
-      const email = input.email.trim().toLowerCase();
-      const profile: DemoUserProfile = {
-        id: `demo-${Date.now()}`,
-        name: input.name.trim(),
-        email,
-        createdAt: new Date().toISOString(),
-        role: "customer",
-      };
-
-      window.localStorage.setItem(DEMO_USER_STORAGE_KEY, JSON.stringify(profile));
-      return { ok: true as const, profile };
-    },
-    [],
-  );
-
-  const signIn = useCallback(
-    (input: { email: string; password: string; remember: boolean }) => {
-      const email = input.email.trim().toLowerCase();
-
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return { ok: false as const, error: "Informe um e-mail válido." };
+      try {
+        await authApi.registerCustomer(input);
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, error: registerErrorMessage(error) };
       }
-
-      if (input.password.length < 6) {
-        return {
-          ok: false as const,
-          error: "A senha deve ter ao menos 6 caracteres.",
-        };
-      }
-
-      const role = resolveUserRole(email);
-      const profile = readProfile();
-      const session: DemoSession = {
-        userId: profile?.id ?? `demo-guest-${Date.now()}`,
-        email,
-        name:
-          role === "admin"
-            ? "Administrador Potala"
-            : role === "seller"
-              ? "Vendedor Potala"
-              : profile?.name?.trim() || "Cliente Potala",
-        role,
-        sellerId: resolveSellerId(email, role),
-        remember: input.remember,
-        signedInAt: new Date().toISOString(),
-      };
-
-      clearSessionStorage();
-
-      if (input.remember) {
-        window.localStorage.setItem(
-          DEMO_SESSION_STORAGE_KEY,
-          JSON.stringify(session),
-        );
-      } else {
-        window.sessionStorage.setItem(
-          DEMO_SESSION_STORAGE_KEY,
-          JSON.stringify(session),
-        );
-      }
-
-      setUser(session);
-      return { ok: true as const, role };
     },
     [],
   );
 
   const signOut = useCallback(() => {
-    clearSessionStorage();
+    // Optimistic: every existing caller does `signOut(); router.push("/acesso")`
+    // right after, with no await — clearing local state synchronously keeps
+    // that working unchanged. The actual POST /auth/logout (which revokes
+    // the session server-side) runs in the background; if it fails, the
+    // session cookie simply outlives the client state until it expires —
+    // not surfaced to the user, same fire-and-forget contract the previous
+    // localStorage-based signOut had.
     setUser(null);
+    void authApi.logout().catch(() => {
+      /* see comment above */
+    });
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -241,9 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signOut,
-      getDemoProfile,
     }),
-    [user, isHydrated, signIn, signUp, signOut, getDemoProfile],
+    [user, isHydrated, signIn, signUp, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,44 +1,26 @@
-/** Sessão e perfil demonstrativos — não representam autenticação segura. */
+/** Real session backed by identity-service, resolved through potala-api-gateway. */
 
 export type UserRole = "customer" | "seller" | "admin";
 
-export interface DemoUserProfile {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: string;
-  role: UserRole;
-  sellerId?: string;
-}
+/** Minimum password length identity-service's own DTOs enforce (RegisterCustomerDto/RegisterSellerDto — MinLength(8)). Kept here so the form's own pre-check matches the backend instead of guessing a different number. */
+export const MIN_PASSWORD_LENGTH = 8;
 
-export interface DemoSession {
+export interface Session {
   userId: string;
   email: string;
+  /** Falls back to the email's local part when no profile name is set — see buildSession in lib/api/auth.ts. */
   name: string;
   role: UserRole;
-  remember: boolean;
-  signedInAt: string;
+  /**
+   * Only present for role "seller", and only once resolved — sellerId lives
+   * in sellers-service, not identity-service (separate schema, separate
+   * service), so it is fetched via a second call
+   * (GET /seller/onboarding/status) right after the session is established.
+   * A seller session with no sellerId means that lookup hasn't completed
+   * yet or failed — SellerAuthGuard already treats a missing sellerId as
+   * "not a valid seller session", same as before this integration.
+   */
   sellerId?: string;
 }
 
 export type AccessMode = "login" | "register";
-
-export const DEMO_USER_STORAGE_KEY = "potala-demo-user-v1";
-export const DEMO_SESSION_STORAGE_KEY = "potala-demo-session-v1";
-export const ADMIN_DEMO_EMAIL = "admin@potala.demo";
-export const SELLER_DEMO_EMAIL = "vendedor@potala.demo";
-/** Conta seller demo vinculada ao seed `sel-1` (Casa das Ervas Sagradas). */
-export const SELLER_DEMO_ID = "sel-1";
-
-export function resolveUserRole(email: string): UserRole {
-  const normalized = email.trim().toLowerCase();
-  if (normalized === ADMIN_DEMO_EMAIL) return "admin";
-  if (normalized === SELLER_DEMO_EMAIL) return "seller";
-  return "customer";
-}
-
-export function resolveSellerId(email: string, role: UserRole): string | undefined {
-  if (role !== "seller") return undefined;
-  if (email.trim().toLowerCase() === SELLER_DEMO_EMAIL) return SELLER_DEMO_ID;
-  return undefined;
-}

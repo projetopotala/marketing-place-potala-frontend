@@ -23,13 +23,27 @@ export function LoginForm({
   const formId = useId();
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
+  // "Lembrar de mim" segue na UI, mas não é mais enviado ao backend: a sessão
+  // (cookie HttpOnly emitido por identity-service) tem um único TTL fixo
+  // (SESSION_TTL_DAYS) independente dessa escolha — não existe hoje uma
+  // sessão "de navegador" mais curta no backend para alternar.
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function attemptSignIn() {
+  async function attemptSignIn() {
+    if (isSubmitting) return;
     setError(null);
 
-    const result = signIn({ email, password, remember });
+    if (!email.trim() || !password) {
+      setError("Informe e-mail e senha.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await signIn({ email, password });
+    setIsSubmitting(false);
+
     if (!result.ok) {
       setError(result.error);
       return;
@@ -46,7 +60,7 @@ export function LoginForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    attemptSignIn();
+    void attemptSignIn();
   }
 
   return (
@@ -102,9 +116,11 @@ export function LoginForm({
         <button
           type="button"
           className={styles.primary}
-          onClick={attemptSignIn}
+          onClick={() => void attemptSignIn()}
+          disabled={isSubmitting}
+          aria-busy={isSubmitting}
         >
-          Entrar
+          {isSubmitting ? "Entrando…" : "Entrar"}
         </button>
 
         <button type="button" className={styles.disabled} disabled>
