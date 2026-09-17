@@ -47,6 +47,29 @@
   --admin-sidebar-width: 240px;
   --admin-topbar-height: 72px;
 
+  /* Aliases admin, duplicados aqui em :root (não só em .shell,
+     admin.module.css) porque o AdminModal/AdminConfirmDialog/AdminDrawer
+     (shared/AdminModal.tsx) renderizam via Radix Dialog.Portal, que anexa
+     o conteudo em document.body — FORA da subarvore DOM de .shell. CSS
+     custom properties só herdam pela arvore do DOM, entao var(--admin-*)
+     dentro do dialog portalizado nao enxergava nada definido so em .shell
+     e caia pro valor inicial (fundo/borda transparentes, sem dim de
+     fundo) — bug real encontrado testando a tela "gerenciar categorias".
+     Mantidos tambem em .shell (admin.module.css) para nao quebrar nada
+     que já dependa de estarem la; os dois blocos devem ficar com os
+     mesmos valores. */
+  --admin-bg: var(--potala-navy-850);
+  --admin-sidebar: var(--potala-navy-950);
+  --admin-surface: var(--potala-navy-800);
+  --admin-elevated: var(--potala-navy-750);
+  --admin-border: var(--potala-border);
+  --admin-gold: var(--potala-gold-500);
+  --admin-text: var(--potala-text-primary);
+  --admin-muted: var(--potala-text-secondary);
+  --admin-success: var(--potala-success);
+  --admin-warning: var(--potala-warning);
+  --admin-danger: var(--potala-danger);
+
   /* Aliases legados (storefront / conta) */
   --potala-bg: var(--potala-navy-900);
   --potala-bg-secondary: var(--potala-navy-700);

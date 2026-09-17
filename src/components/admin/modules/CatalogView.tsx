@@ -1,417 +1,272 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useAdminData } from "@/features/admin/hooks/useAdminData";
-import type { Attribute, Category } from "@/features/admin/domain/types";
-import { downloadCsv, toCsv } from "@/features/admin/utils/csv";
-import { includesQuery } from "@/features/admin/utils/filters";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ADMIN_CATEGORY_STATUS_LABEL,
+  createAdminCategory,
+  listAdminCategories,
+  updateAdminCategory,
+  type AdminCategory,
+  type AdminCategoryStatus,
+} from "@/lib/api/admin";
+import { ApiError } from "@/lib/api/client";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
 import {
   AdminMetricCard,
   AdminMetricsRow,
 } from "@/components/admin/shared/AdminMetricCard";
-import { sharedStyles } from "@/components/admin/shared/AdminDataTable";
-import {
-  AdminStatusBadge,
-  Field,
-} from "@/components/admin/shared/AdminStatusBadge";
-import { AdminModal, AdminConfirmDialog } from "@/components/admin/shared/AdminModal";
+import { AdminDataTable, sharedStyles } from "@/components/admin/shared/AdminDataTable";
+import { AdminStatusBadge, Field } from "@/components/admin/shared/AdminStatusBadge";
+import { AdminModal } from "@/components/admin/shared/AdminModal";
 import { useAdminToast } from "@/components/admin/shared/AdminToastProvider";
-import moduleStyles from "./modules.module.css";
 
+function categoryTone(status: AdminCategoryStatus) {
+  return status === "ACTIVE" ? ("success" as const) : ("muted" as const);
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("pt-BR");
+}
+
+/**
+ * Real via GET/POST/PATCH /admin/categories (catalog-service, através do
+ * gateway) — antes desta sessão essa tela era 100% dado demo
+ * (AdminDataContext) e não existia NENHUM jeito de cadastrar uma categoria
+ * a não ser SQL direto no Supabase (foi exatamente o que travou o teste da
+ * tela "novo produto" do vendedor).
+ *
+ * Escopo decidido explicitamente com o Arthur: lista simples (nome, slug
+ * gerado automaticamente, ativar/desativar) — SEM hierarquia de categoria
+ * pai/filha, mesmo o schema já suportando isso (Category.parentId). Também
+ * SEM os "atributos" que a versão demo desta tela tinha: catalog-service não
+ * tem (e nunca teve) nenhum model de atributo — era 100% dado fake, sem
+ * contrapartida real no backend, então foi removido daqui em vez de deixado
+ * fingindo funcionar. Sem exclusão: uma categoria é desativada
+ * (status: INACTIVE), nunca apagada — Product.categoryId é ON DELETE
+ * RESTRICT no schema, então um DELETE de verdade falharia assim que
+ * qualquer produto referenciasse a categoria mesmo.
+ */
 export function CatalogView() {
-  const { db, isHydrated, repo, refresh } = useAdminData();
   const toast = useAdminToast();
-  const [query, setQuery] = useState("");
-  const [categoryModal, setCategoryModal] = useState<"create" | Category | null>(null);
-  const [attrModal, setAttrModal] = useState<"create" | Attribute | null>(null);
-  const [assocCategory, setAssocCategory] = useState<Category | null>(null);
-  const [catName, setCatName] = useState("");
-  const [catParent, setCatParent] = useState<string>("");
-  const [attrName, setAttrName] = useState("");
-  const [attrValues, setAttrValues] = useState("");
-  const [assocIds, setAssocIds] = useState<string[]>([]);
-  const [deactivateId, setDeactivateId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<AdminCategory[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const roots = useMemo(() => {
-    const filtered = db.categories.filter((c) =>
-      includesQuery(c.name, query),
-    );
-    const ids = new Set(filtered.map((c) => c.id));
-    // include parents of matched children
-    for (const c of filtered) {
-      if (c.parentId) ids.add(c.parentId);
+  const [editing, setEditing] = useState<"create" | AdminCategory | null>(null);
+  const [nameInput, setNameInput] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setCategories(await listAdminCategories());
+    } catch (err) {
+      setCategories(null);
+      setError(
+        err instanceof ApiError ? err.message : "Não foi possível carregar as categorias.",
+      );
+    } finally {
+      setIsLoading(false);
     }
-    return db.categories.filter((c) => !c.parentId && ids.has(c.id));
-  }, [db.categories, query]);
+  }, []);
 
-  const childrenOf = (parentId: string) =>
-    db.categories.filter(
-      (c) =>
-        c.parentId === parentId &&
-        (includesQuery(c.name, query) || includesQuery(
-          db.categories.find((p) => p.id === parentId)?.name ?? "",
-          query,
-        )),
-    );
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const metrics = useMemo(
-    () => ({
-      categories: db.categories.length,
-      active: db.categories.filter((c) => c.status === "active").length,
-      attributes: db.attributes.length,
-      linked: db.categories.filter((c) => c.attributeIds.length > 0).length,
-    }),
-    [db.categories, db.attributes],
-  );
+  const metrics = {
+    total: categories?.length ?? 0,
+    active: categories?.filter((c) => c.status === "ACTIVE").length ?? 0,
+    inactive: categories?.filter((c) => c.status === "INACTIVE").length ?? 0,
+  };
 
-  function openCreateCategory() {
-    setCatName("");
-    setCatParent("");
-    setCategoryModal("create");
+  function openCreate() {
+    setNameInput("");
+    setFormError(null);
+    setEditing("create");
   }
 
-  function openEditCategory(category: Category) {
-    setCatName(category.name);
-    setCatParent(category.parentId ?? "");
-    setCategoryModal(category);
+  function openEdit(category: AdminCategory) {
+    setNameInput(category.name);
+    setFormError(null);
+    setEditing(category);
   }
 
-  function saveCategory() {
-    if (!catName.trim()) {
-      toast.push("Informe o nome", "error");
+  async function saveCategory() {
+    const name = nameInput.trim();
+    if (!name) {
+      setFormError("Informe o nome.");
       return;
     }
-    if (categoryModal === "create") {
-      refresh(
-        repo.createCategory({
-          name: catName.trim(),
-          parentId: catParent || null,
-          status: "active",
-          attributeIds: [],
-        }),
+
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      if (editing === "create") {
+        const created = await createAdminCategory(name);
+        setCategories((current) => (current ? [...current, created] : [created]));
+        toast.push(`${created.name} criada`);
+      } else if (editing) {
+        const updated = await updateAdminCategory(editing.id, { name });
+        setCategories((current) =>
+          current ? current.map((c) => (c.id === updated.id ? updated : c)) : current,
+        );
+        toast.push(`${updated.name} atualizada`);
+      }
+      setEditing(null);
+    } catch (err) {
+      setFormError(
+        err instanceof ApiError ? err.message : "Não foi possível salvar a categoria.",
       );
-      toast.push("Categoria criada");
-    } else if (categoryModal) {
-      refresh(
-        repo.updateCategory(categoryModal.id, {
-          name: catName.trim(),
-          parentId: catParent || null,
-        }),
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function toggleStatus(category: AdminCategory) {
+    const nextStatus: AdminCategoryStatus =
+      category.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    setPendingId(category.id);
+    try {
+      const updated = await updateAdminCategory(category.id, { status: nextStatus });
+      setCategories((current) =>
+        current ? current.map((c) => (c.id === updated.id ? updated : c)) : current,
       );
-      toast.push("Categoria atualizada");
+      toast.push(
+        nextStatus === "ACTIVE" ? `${updated.name} ativada` : `${updated.name} desativada`,
+      );
+    } catch (err) {
+      toast.push(
+        err instanceof ApiError ? err.message : "Não foi possível alterar o status.",
+        "error",
+      );
+    } finally {
+      setPendingId(null);
     }
-    setCategoryModal(null);
-  }
-
-  function openCreateAttr() {
-    setAttrName("");
-    setAttrValues("");
-    setAttrModal("create");
-  }
-
-  function openEditAttr(attr: Attribute) {
-    setAttrName(attr.name);
-    setAttrValues(attr.values.join(", "));
-    setAttrModal(attr);
-  }
-
-  function saveAttribute() {
-    if (!attrName.trim()) {
-      toast.push("Informe o nome", "error");
-      return;
-    }
-    const values = attrValues
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
-    if (attrModal === "create") {
-      refresh(repo.createAttribute({ name: attrName.trim(), values }));
-      toast.push("Atributo criado");
-    } else if (attrModal) {
-      refresh(repo.updateAttribute(attrModal.id, { name: attrName.trim(), values }));
-      toast.push("Atributo atualizado");
-    }
-    setAttrModal(null);
-  }
-
-  function exportCsv() {
-    downloadCsv(
-      "catalogo.csv",
-      toCsv(
-        ["Categoria", "Pai", "Status", "Atributos"],
-        db.categories.map((c) => [
-          c.name,
-          db.categories.find((p) => p.id === c.parentId)?.name ?? "",
-          c.status,
-          c.attributeIds
-            .map((id) => db.attributes.find((a) => a.id === id)?.name ?? id)
-            .join("; "),
-        ]),
-      ),
-    );
-    toast.push("CSV exportado");
-  }
-
-  if (!isHydrated) {
-    return <div className={sharedStyles.skeleton} aria-busy="true" />;
-  }
-
-  function renderNode(category: Category, nested = false) {
-    return (
-      <div
-        key={category.id}
-        className={`${moduleStyles.treeNode} ${nested ? moduleStyles.treeChild : ""}`}
-      >
-        <div className={sharedStyles.rowActions} style={{ justifyContent: "space-between" }}>
-          <div>
-            <strong>{category.name}</strong>{" "}
-            <AdminStatusBadge
-              label={category.status === "active" ? "Ativa" : "Inativa"}
-              tone={category.status === "active" ? "success" : "muted"}
-            />
-            <p className={moduleStyles.muted}>
-              Atributos:{" "}
-              {category.attributeIds
-                .map((id) => db.attributes.find((a) => a.id === id)?.name ?? id)
-                .join(", ") || "—"}
-            </p>
-          </div>
-          <div className={sharedStyles.rowActions}>
-            <button
-              type="button"
-              className={sharedStyles.linkBtn}
-              onClick={() => openEditCategory(category)}
-            >
-              Editar
-            </button>
-            <button
-              type="button"
-              className={sharedStyles.linkBtn}
-              onClick={() => {
-                setAssocCategory(category);
-                setAssocIds([...category.attributeIds]);
-              }}
-            >
-              Atributos
-            </button>
-            {category.status === "active" ? (
-              <button
-                type="button"
-                className={sharedStyles.linkBtn}
-                onClick={() => setDeactivateId(category.id)}
-              >
-                Desativar
-              </button>
-            ) : null}
-          </div>
-        </div>
-        {childrenOf(category.id).map((child) => renderNode(child, true))}
-      </div>
-    );
   }
 
   return (
     <div className={sharedStyles.stack}>
       <AdminPageHeader
-        title="Catálogo"
-        description="Árvore de categorias e atributos do marketplace."
+        title="Categorias"
+        description="Categorias do catálogo — lista simples, sem hierarquia (produtos referenciam diretamente)."
         actions={
-          <>
-            <button type="button" className={sharedStyles.btnSecondary} onClick={exportCsv}>
-              Exportar CSV
-            </button>
-            <button type="button" className={sharedStyles.btnSecondary} onClick={openCreateAttr}>
-              Novo atributo
-            </button>
-            <button type="button" className={sharedStyles.btn} onClick={openCreateCategory}>
-              Nova categoria
-            </button>
-          </>
+          <button type="button" className={sharedStyles.btn} onClick={openCreate}>
+            Nova categoria
+          </button>
         }
       />
 
       <AdminMetricsRow>
-        <AdminMetricCard label="Categorias" value={String(metrics.categories)} />
+        <AdminMetricCard label="Total" value={String(metrics.total)} />
         <AdminMetricCard label="Ativas" value={String(metrics.active)} />
-        <AdminMetricCard label="Atributos" value={String(metrics.attributes)} />
-        <AdminMetricCard label="Com atributos" value={String(metrics.linked)} />
+        <AdminMetricCard label="Inativas" value={String(metrics.inactive)} />
       </AdminMetricsRow>
 
-      <Field label="Buscar categoria">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Nome da categoria…"
-        />
-      </Field>
-
-      <div className={sharedStyles.grid2}>
-        <div className={sharedStyles.panel}>
-          <h2 className={sharedStyles.panelTitle}>Árvore de categorias</h2>
-          <div className={moduleStyles.tree}>
-            {roots.map((root) => renderNode(root))}
-            {roots.length === 0 ? (
-              <p className={moduleStyles.muted}>Nenhuma categoria encontrada.</p>
-            ) : null}
-          </div>
-        </div>
-        <div className={sharedStyles.panel}>
-          <h2 className={sharedStyles.panelTitle}>Atributos</h2>
-          <ul className={moduleStyles.timeline}>
-            {db.attributes.map((attr) => (
-              <li key={attr.id} className={moduleStyles.timelineItem}>
-                <div className={sharedStyles.rowActions} style={{ justifyContent: "space-between" }}>
-                  <div>
-                    <p className={moduleStyles.timelineLabel}>{attr.name}</p>
-                    <p className={moduleStyles.timelineDetail}>{attr.values.join(", ")}</p>
-                  </div>
+      {isLoading ? (
+        <p role="status">Carregando categorias…</p>
+      ) : error ? (
+        <p role="alert" style={{ color: "var(--potala-danger, #c95c57)" }}>
+          {error}
+        </p>
+      ) : (
+        <AdminDataTable
+          caption="Lista de categorias"
+          rows={categories ?? []}
+          columns={[
+            { key: "name", header: "Nome", render: (row) => row.name },
+            { key: "slug", header: "Slug", render: (row) => row.slug },
+            {
+              key: "status",
+              header: "Status",
+              render: (row) => (
+                <AdminStatusBadge
+                  label={ADMIN_CATEGORY_STATUS_LABEL[row.status]}
+                  tone={categoryTone(row.status)}
+                />
+              ),
+            },
+            {
+              key: "createdAt",
+              header: "Criada em",
+              render: (row) => formatDate(row.createdAt),
+            },
+            {
+              key: "actions",
+              header: "Ações",
+              render: (row) => (
+                <div className={sharedStyles.rowActions}>
                   <button
                     type="button"
                     className={sharedStyles.linkBtn}
-                    onClick={() => openEditAttr(attr)}
+                    onClick={() => openEdit(row)}
                   >
                     Editar
                   </button>
+                  <button
+                    type="button"
+                    className={sharedStyles.linkBtn}
+                    disabled={pendingId === row.id}
+                    onClick={() => void toggleStatus(row)}
+                  >
+                    {row.status === "ACTIVE" ? "Desativar" : "Ativar"}
+                  </button>
                 </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
+              ),
+            },
+          ]}
+          mobileCard={(row) => (
+            <>
+              <strong>{row.name}</strong>
+              <span>{row.slug}</span>
+              <AdminStatusBadge
+                label={ADMIN_CATEGORY_STATUS_LABEL[row.status]}
+                tone={categoryTone(row.status)}
+              />
+            </>
+          )}
+        />
+      )}
 
       <AdminModal
-        open={Boolean(categoryModal)}
-        title={categoryModal === "create" ? "Nova categoria" : "Editar categoria"}
-        onClose={() => setCategoryModal(null)}
+        open={Boolean(editing)}
+        title={editing === "create" ? "Nova categoria" : "Editar categoria"}
+        onClose={() => setEditing(null)}
         actions={
           <>
             <button
               type="button"
               className={sharedStyles.btnGhost}
-              onClick={() => setCategoryModal(null)}
-            >
-              Cancelar
-            </button>
-            <button type="button" className={sharedStyles.btn} onClick={saveCategory}>
-              Salvar
-            </button>
-          </>
-        }
-      >
-        <div className={sharedStyles.stack}>
-          <Field label="Nome">
-            <input value={catName} onChange={(e) => setCatName(e.target.value)} />
-          </Field>
-          <Field label="Categoria pai">
-            <select value={catParent} onChange={(e) => setCatParent(e.target.value)}>
-              <option value="">Nenhuma (raiz)</option>
-              {db.categories
-                .filter((c) =>
-                  categoryModal === "create" || categoryModal
-                    ? c.id !== (typeof categoryModal === "object" ? categoryModal.id : "")
-                    : true,
-                )
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </select>
-          </Field>
-        </div>
-      </AdminModal>
-
-      <AdminModal
-        open={Boolean(attrModal)}
-        title={attrModal === "create" ? "Novo atributo" : "Editar atributo"}
-        onClose={() => setAttrModal(null)}
-        actions={
-          <>
-            <button
-              type="button"
-              className={sharedStyles.btnGhost}
-              onClick={() => setAttrModal(null)}
-            >
-              Cancelar
-            </button>
-            <button type="button" className={sharedStyles.btn} onClick={saveAttribute}>
-              Salvar
-            </button>
-          </>
-        }
-      >
-        <div className={sharedStyles.stack}>
-          <Field label="Nome">
-            <input value={attrName} onChange={(e) => setAttrName(e.target.value)} />
-          </Field>
-          <Field label="Valores (separados por vírgula)">
-            <input value={attrValues} onChange={(e) => setAttrValues(e.target.value)} />
-          </Field>
-        </div>
-      </AdminModal>
-
-      <AdminModal
-        open={Boolean(assocCategory)}
-        title={`Atributos · ${assocCategory?.name ?? ""}`}
-        onClose={() => setAssocCategory(null)}
-        actions={
-          <>
-            <button
-              type="button"
-              className={sharedStyles.btnGhost}
-              onClick={() => setAssocCategory(null)}
+              onClick={() => setEditing(null)}
+              disabled={isSaving}
             >
               Cancelar
             </button>
             <button
               type="button"
               className={sharedStyles.btn}
-              onClick={() => {
-                if (!assocCategory) return;
-                refresh(repo.updateCategory(assocCategory.id, { attributeIds: assocIds }));
-                setAssocCategory(null);
-                toast.push("Atributos associados");
-              }}
+              onClick={() => void saveCategory()}
+              disabled={isSaving}
             >
-              Salvar
+              {isSaving ? "Salvando…" : "Salvar"}
             </button>
           </>
         }
       >
         <div className={sharedStyles.stack}>
-          {db.attributes.map((attr) => (
-            <label key={attr.id} className={moduleStyles.checkboxRow}>
-              <input
-                type="checkbox"
-                checked={assocIds.includes(attr.id)}
-                onChange={() =>
-                  setAssocIds((current) =>
-                    current.includes(attr.id)
-                      ? current.filter((x) => x !== attr.id)
-                      : [...current, attr.id],
-                  )
-                }
-              />
-              {attr.name}
-            </label>
-          ))}
+          <Field label="Nome">
+            <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} />
+          </Field>
+          {formError ? (
+            <p role="alert" style={{ color: "var(--potala-danger, #c95c57)" }}>
+              {formError}
+            </p>
+          ) : null}
         </div>
       </AdminModal>
-
-      <AdminConfirmDialog
-        open={Boolean(deactivateId)}
-        title="Desativar categoria"
-        description="A categoria será desativada (sem exclusão permanente se estiver em uso)."
-        confirmLabel="Desativar"
-        onClose={() => setDeactivateId(null)}
-        onConfirm={() => {
-          if (!deactivateId) return;
-          refresh(repo.deactivateCategory(deactivateId));
-          setDeactivateId(null);
-          toast.push("Categoria desativada");
-        }}
-      />
     </div>
   );
 }

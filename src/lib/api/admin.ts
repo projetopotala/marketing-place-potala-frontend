@@ -103,3 +103,62 @@ export function rejectSeller(id: string, reason?: string): Promise<AdminSellerRe
 export function suspendSeller(id: string, reason?: string): Promise<AdminSellerReviewResult> {
   return reviewSeller(id, "suspend", reason);
 }
+
+/** Mirrors catalog-service's Prisma CategoryStatus enum. */
+export type AdminCategoryStatus = "ACTIVE" | "INACTIVE";
+
+export const ADMIN_CATEGORY_STATUS_LABEL: Record<AdminCategoryStatus, string> = {
+  ACTIVE: "Ativa",
+  INACTIVE: "Inativa",
+};
+
+/** Mirrors AdminCategoriesController's response shape (catalog-service) exactly. */
+export interface AdminCategory {
+  id: string;
+  name: string;
+  slug: string;
+  status: AdminCategoryStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * GET /admin/categories — every category, ACTIVE and INACTIVE, unpaginated
+ * (small dataset, same call shape as GET /seller/categories). No search/
+ * filter server-side; the list is short enough to filter client-side if
+ * ever needed.
+ */
+export async function listAdminCategories(): Promise<AdminCategory[]> {
+  const result = await apiFetch<AdminCategory[]>("/admin/categories");
+  return result ?? [];
+}
+
+/** POST /admin/categories — slug is always derived from `name` server-side, never sent here. */
+export async function createAdminCategory(name: string): Promise<AdminCategory> {
+  const result = await apiFetch<AdminCategory>("/admin/categories", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+/** PATCH /admin/categories/:id — partial; renaming regenerates the slug server-side. */
+export async function updateAdminCategory(
+  id: string,
+  patch: { name?: string; status?: AdminCategoryStatus },
+): Promise<AdminCategory> {
+  const result = await apiFetch<AdminCategory>(
+    `/admin/categories/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
