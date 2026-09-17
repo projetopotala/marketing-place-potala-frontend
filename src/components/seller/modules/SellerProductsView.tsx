@@ -95,13 +95,7 @@ export function SellerProductsView() {
             Seus produtos cadastrados no catálogo, direto do catalog-service.
           </p>
         </div>
-        <Link
-          href="/loja/produtos/novo"
-          className={styles.primaryBtn}
-          aria-disabled="true"
-          title="Criar produto ainda não está conectado ao backend real"
-          onClick={(event) => event.preventDefault()}
-        >
+        <Link href="/loja/produtos/novo" className={styles.primaryBtn}>
           Novo produto
         </Link>
       </header>

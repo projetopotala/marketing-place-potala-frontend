@@ -99,3 +99,65 @@ export async function getSellerProduct(id: string): Promise<SellerProduct> {
   }
   return result;
 }
+
+/** Mirrors catalog-service's Category model, trimmed to the fields SellerCategoriesController.listActive() returns. */
+export interface SellerCategory {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+/**
+ * GET /seller/categories — new endpoint (catalog-service), added to unblock
+ * this form: lists ACTIVE categories only, ACTIVE sellers only (same guard
+ * pair as /seller/products). No pagination — this is a short reference
+ * list, not user content.
+ */
+export async function listSellerCategories(): Promise<SellerCategory[]> {
+  const result = await apiFetch<SellerCategory[]>("/seller/categories");
+  return result ?? [];
+}
+
+/**
+ * Every product created through this form gets exactly one variant, named
+ * "Padrão" (the same default catalog-service itself falls back to
+ * elsewhere) — CreateProductDto requires at least one variant with its own
+ * sku/quantity, but this screen deliberately doesn't expose multi-variant
+ * creation (e.g. size/color) yet; see status doc for the scope decision.
+ */
+const DEFAULT_VARIANT_NAME = "Padrão";
+
+export interface CreateSellerProductInput {
+  title: string;
+  description?: string;
+  categoryId: string;
+  priceCents: number;
+  sku: string;
+  quantity: number;
+}
+
+/** POST /seller/products — ACTIVE sellers only. Mirrors CreateProductDto exactly, with a single implicit variant built from sku/quantity. */
+export async function createSellerProduct(
+  input: CreateSellerProductInput,
+): Promise<SellerProduct> {
+  const result = await apiFetch<SellerProduct>("/seller/products", {
+    method: "POST",
+    body: JSON.stringify({
+      title: input.title,
+      description: input.description?.trim() ? input.description.trim() : undefined,
+      categoryId: input.categoryId,
+      priceCents: input.priceCents,
+      variants: [
+        {
+          name: DEFAULT_VARIANT_NAME,
+          sku: input.sku,
+          quantity: input.quantity,
+        },
+      ],
+    }),
+  });
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
