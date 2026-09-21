@@ -34,6 +34,14 @@ export interface SellerProductVariant {
   inventory: SellerProductInventory | null;
 }
 
+/** Mirrors catalog-service's ProductImage model. Only present on GET /seller/products/:id (detail) — the list endpoint does not include it. */
+export interface SellerProductImage {
+  id: string;
+  url: string;
+  alt: string | null;
+  position: number;
+}
+
 /** Mirrors catalog-service's Product model as returned by GET /seller/products(/:id). */
 export interface SellerProduct {
   id: string;
@@ -48,6 +56,8 @@ export interface SellerProduct {
   createdAt: string;
   updatedAt: string;
   variants: SellerProductVariant[];
+  /** Only populated by getSellerProduct — listSellerProducts does not include images. */
+  images?: SellerProductImage[];
 }
 
 export interface PageInfo {
@@ -134,6 +144,8 @@ export interface CreateSellerProductInput {
   priceCents: number;
   sku: string;
   quantity: number;
+  /** URLs already hosted elsewhere by the seller — mirrors CreateProductDto.imageUrls (catalog-service); max 6, see MAX_PRODUCT_IMAGE_URLS. */
+  imageUrls?: string[];
 }
 
 /** POST /seller/products — ACTIVE sellers only. Mirrors CreateProductDto exactly, with a single implicit variant built from sku/quantity. */
@@ -154,8 +166,34 @@ export async function createSellerProduct(
           quantity: input.quantity,
         },
       ],
+      imageUrls: input.imageUrls && input.imageUrls.length > 0 ? input.imageUrls : undefined,
     }),
   });
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+/**
+ * PATCH /seller/products/:id — publica (DRAFT/INACTIVE -> ACTIVE) ou
+ * despublica (-> INACTIVE) um produto da própria loja. Mirrors
+ * UpdateProductStatusDto (catalog-service): só ACTIVE/INACTIVE são aceitos
+ * aqui, REVIEW/REJECTED implicam um fluxo de moderação que não existe
+ * ainda. 404 (não 403) se o produto for de outra loja — mesmo padrão de
+ * "404 indistinguível" do resto da API.
+ */
+export async function updateSellerProductStatus(
+  id: string,
+  status: Extract<SellerProductStatus, "ACTIVE" | "INACTIVE">,
+): Promise<SellerProduct> {
+  const result = await apiFetch<SellerProduct>(
+    `/seller/products/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    },
+  );
   if (!result) {
     throw new Error("Resposta vazia do servidor.");
   }

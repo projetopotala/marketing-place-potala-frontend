@@ -13,6 +13,9 @@ import styles from "@/components/seller/seller.module.css";
 
 const MAX_TITLE_LENGTH = 160;
 const MAX_DESCRIPTION_LENGTH = 5000;
+// Mirrors catalog-service's products.constants.ts (MAX_PRODUCT_IMAGE_URLS / MAX_IMAGE_URL_LENGTH) — kept in sync manually, there is no shared package between frontend and backend here.
+const MAX_IMAGE_URLS = 6;
+const MAX_IMAGE_URL_LENGTH = 2048;
 
 /**
  * Real criação via POST /seller/products (catalog-service). Um produto = uma
@@ -23,6 +26,11 @@ const MAX_DESCRIPTION_LENGTH = 5000;
  * Categoria vem de GET /seller/categories (novo endpoint, catalog-service) —
  * antes desta sessão não existia forma nenhuma do frontend descobrir um
  * categoryId válido, o que bloqueava esta tela inteira.
+ *
+ * Imagens: não existe endpoint de upload (ver status do projeto) — o
+ * vendedor cola URLs de imagens já hospedadas em outro lugar. Campo
+ * totalmente opcional, até MAX_IMAGE_URLS entradas, mesma regra do
+ * CreateProductDto.imageUrls no catalog-service.
  */
 export function SellerProductCreateView() {
   const router = useRouter();
@@ -37,6 +45,7 @@ export function SellerProductCreateView() {
   const [price, setPrice] = useState("");
   const [sku, setSku] = useState("");
   const [quantity, setQuantity] = useState("0");
+  const [imageUrls, setImageUrls] = useState<string[]>([""]);
 
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,6 +69,20 @@ export function SellerProductCreateView() {
       cancelled = true;
     };
   }, []);
+
+  function updateImageUrl(index: number, value: string) {
+    setImageUrls((current) => current.map((url, i) => (i === index ? value : url)));
+  }
+
+  function addImageUrl() {
+    setImageUrls((current) =>
+      current.length >= MAX_IMAGE_URLS ? current : [...current, ""],
+    );
+  }
+
+  function removeImageUrl(index: number) {
+    setImageUrls((current) => current.filter((_, i) => i !== index));
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -101,6 +124,23 @@ export function SellerProductCreateView() {
       return;
     }
 
+    const trimmedImageUrls = imageUrls.map((url) => url.trim()).filter(Boolean);
+    for (const url of trimmedImageUrls) {
+      if (url.length > MAX_IMAGE_URL_LENGTH) {
+        setFormError(`Cada URL de imagem pode ter no máximo ${MAX_IMAGE_URL_LENGTH} caracteres.`);
+        return;
+      }
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          throw new Error("protocol");
+        }
+      } catch {
+        setFormError(`URL de imagem inválida: ${url}`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const product = await createSellerProduct({
@@ -110,6 +150,7 @@ export function SellerProductCreateView() {
         priceCents,
         sku: trimmedSku,
         quantity: quantityValue,
+        imageUrls: trimmedImageUrls.length > 0 ? trimmedImageUrls : undefined,
       });
       toast.push(`${product.title} criado com sucesso.`);
       router.push(`/loja/produtos/${product.id}`);
@@ -210,6 +251,44 @@ export function SellerProductCreateView() {
             onChange={(event) => setQuantity(event.target.value)}
             required
           />
+        </div>
+
+        <div className={styles.field}>
+          <label>Imagens (URLs)</label>
+          <p style={{ fontSize: "0.82rem", color: "var(--seller-muted)", marginTop: -2, marginBottom: 8 }}>
+            Opcional. Cole links de imagens já hospedadas em outro lugar (até {MAX_IMAGE_URLS}). Sem
+            isso, o produto aparece na vitrine com uma imagem genérica.
+          </p>
+          {imageUrls.map((url, index) => (
+            <div
+              key={index}
+              style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}
+            >
+              <input
+                aria-label={`URL da imagem ${index + 1}`}
+                value={url}
+                onChange={(event) => updateImageUrl(index, event.target.value)}
+                placeholder="https://…"
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className={styles.ghostBtn}
+                onClick={() => removeImageUrl(index)}
+                disabled={imageUrls.length === 1}
+              >
+                Remover
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className={styles.ghostBtn}
+            onClick={addImageUrl}
+            disabled={imageUrls.length >= MAX_IMAGE_URLS}
+          >
+            + Adicionar imagem
+          </button>
         </div>
 
         {formError ? (
