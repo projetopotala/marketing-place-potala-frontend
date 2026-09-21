@@ -199,3 +199,41 @@ export async function updateSellerProductStatus(
   }
   return result;
 }
+
+/**
+ * Snapshot returned by PATCH /seller/products/:productId/variants/:variantId/stock
+ * — mirrors InventoryService.StockSnapshot (catalog-service), not the full
+ * SellerProduct/SellerProductVariant shape, since the endpoint only touches
+ * Inventory.
+ */
+export interface VariantStockSnapshot {
+  variantId: string;
+  quantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+}
+
+/**
+ * PATCH /seller/products/:productId/variants/:variantId/stock — sets the
+ * variant's total on-hand quantity directly (a manual seller adjustment,
+ * not a checkout reservation). The backend rejects (409) a target below
+ * whatever is currently reserved — surfaced here as an ApiError like any
+ * other backend rejection, the caller decides how to show it.
+ */
+export async function updateVariantStock(
+  productId: string,
+  variantId: string,
+  quantity: number,
+): Promise<VariantStockSnapshot> {
+  const result = await apiFetch<VariantStockSnapshot>(
+    `/seller/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}/stock`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ quantity }),
+    },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
