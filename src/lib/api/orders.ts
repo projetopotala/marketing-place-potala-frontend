@@ -37,6 +37,15 @@ export type SellerOrderStatus =
   | "DELIVERED"
   | "CANCELLED";
 
+export const SELLER_ORDER_STATUS_LABEL: Record<SellerOrderStatus, string> = {
+  PENDING: "Pendente",
+  CONFIRMED: "Confirmado",
+  PREPARING: "Em preparação",
+  SHIPPED: "Enviado",
+  DELIVERED: "Entregue",
+  CANCELLED: "Cancelado",
+};
+
 export type PaymentTransactionStatus =
   | "PENDING"
   | "APPROVED"
@@ -195,6 +204,51 @@ export async function listMyOrders(params?: {
 /** GET /orders/:id — 404 (não 403) para um pedido de outro cliente, mesmo padrão de "404 indistinguível" do resto da API. */
 export async function getMyOrder(id: string): Promise<OrderResponse> {
   const result = await apiFetch<OrderResponse>(`/orders/${encodeURIComponent(id)}`);
+  if (!result) {
+    throw new Error("Pedido não encontrado.");
+  }
+  return result;
+}
+
+/**
+ * `GET /seller/orders(/:id)` (orders-service, via o gateway) devolve o
+ * `SellerOrder` do próprio vendedor autenticado — nunca as linhas de outros
+ * vendedores do mesmo pedido — acrescido de um resumo do `Order` pai
+ * (`orderNumber`, `status` do pedido todo, `createdAt`, `shippingAddress`)
+ * pra dar contexto de entrega sem expor dados de outro vendedor. Somente
+ * leitura nesta v1 (ver status-migracao-microservicos.md, "Fase 3 — pedidos
+ * do vendedor"): sem transição de status nem registro de rastreio aqui —
+ * isso é um follow-up separado, fora de escopo por ora.
+ */
+export interface SellerOrderForSellerResponse extends SellerOrderResponse {
+  order: {
+    orderNumber: string;
+    status: OrderStatus;
+    createdAt: string;
+    shippingAddress: OrderShippingAddressResponse | null;
+  };
+}
+
+/** GET /seller/orders — SellerOrder rows da própria loja autenticada, paginados por cursor. */
+export async function listMySellerOrders(params?: {
+  limit?: number;
+  cursor?: string | null;
+}): Promise<Paginated<SellerOrderForSellerResponse>> {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.cursor) query.set("cursor", params.cursor);
+  const qs = query.toString();
+  const result = await apiFetch<Paginated<SellerOrderForSellerResponse>>(
+    `/seller/orders${qs ? `?${qs}` : ""}`,
+  );
+  return result ?? { items: [], pageInfo: { hasNextPage: false, nextCursor: null } };
+}
+
+/** GET /seller/orders/:id — 404 (não 403) para um SellerOrder de outra loja, mesmo padrão de "404 indistinguível" do resto da API. */
+export async function getMySellerOrder(id: string): Promise<SellerOrderForSellerResponse> {
+  const result = await apiFetch<SellerOrderForSellerResponse>(
+    `/seller/orders/${encodeURIComponent(id)}`,
+  );
   if (!result) {
     throw new Error("Pedido não encontrado.");
   }

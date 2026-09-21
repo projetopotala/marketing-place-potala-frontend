@@ -1,216 +1,129 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useAdminToast } from "@/components/admin/shared/AdminToastProvider";
-import { useAdminData } from "@/features/admin/context/AdminDataContext";
 import {
-  ORDER_STATUS_LABEL,
-  ORDER_TRANSITIONS,
-  SHIPMENT_STATUS_LABEL,
-  canTransitionOrder,
-} from "@/features/admin/domain/status";
-import type { OrderStatus } from "@/features/admin/domain/types";
-import { formatMoney } from "@/features/admin/utils/currency";
-import { sellerOwnsOrder } from "@/features/seller/selectors";
-import { useSellerId } from "@/features/seller/useSellerId";
+  getMySellerOrder,
+  SELLER_ORDER_STATUS_LABEL,
+  type SellerOrderForSellerResponse,
+} from "@/lib/api/orders";
+import { ApiError } from "@/lib/api/client";
 import styles from "@/components/seller/seller.module.css";
 
+function formatMoney(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+/**
+ * Detalhe real via GET /seller/orders/:id (orders-service, através do
+ * gateway) — substitui o mock antigo baseado em AdminDataContext. 404 pra
+ * SellerOrder de outra loja (não 403), mesmo padrão de "404 indistinguível"
+ * do resto da API — ApiError já chega com essa mensagem pronta do backend.
+ *
+ * Somente leitura nesta v1 (ver status-migracao-microservicos.md, "Fase 3 —
+ * pedidos do vendedor"): a versão mock tinha avançar-status, registrar
+ * rastreio e uma timeline de eventos — nenhum desses tem equivalente no
+ * backend real ainda (SellerOrdersController só expõe GET), então ficaram
+ * de fora aqui deliberadamente, como um follow-up separado e já sinalizado
+ * a Arthur.
+ */
 export function SellerOrderDetailView() {
   const params = useParams<{ id: string }>();
-  const orderId = params.id;
-  const sellerId = useSellerId();
-  const { db, repo, refresh, isHydrated } = useAdminData();
-  const { push } = useAdminToast();
-  const [tracking, setTracking] = useState("");
-  const [carrier, setCarrier] = useState("Correios");
+  const [sellerOrder, setSellerOrder] = useState<SellerOrderForSellerResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const order = useMemo(
-    () => db.orders.find((item) => item.id === orderId),
-    [db.orders, orderId],
-  );
-  const shipment = useMemo(
-    () => db.shipments.find((item) => item.orderId === orderId),
-    [db.shipments, orderId],
-  );
-  const transaction = useMemo(
-    () => db.transactions.find((item) => item.orderId === orderId),
-    [db.transactions, orderId],
-  );
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+    getMySellerOrder(params.id)
+      .then((result) => {
+        if (!cancelled) setSellerOrder(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSellerOrder(null);
+        setError(
+          err instanceof ApiError ? err.message : "Pedido não encontrado.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [params.id]);
 
-  if (!isHydrated || !sellerId) {
+  if (isLoading) {
     return <p role="status">Carregando pedido…</p>;
   }
 
-  if (!order || !sellerOwnsOrder(db, sellerId, orderId)) {
+  if (error || !sellerOrder) {
     return (
       <section className={styles.denied} role="alert">
         <h1 className={styles.pageTitle}>Pedido indisponível</h1>
         <p>
-          Este pedido não pertence à sua loja. O isolamento por sellerId
-          impede acesso cruzado mesmo via URL.
+          {error ?? "Este pedido não pertence à sua loja."}{" "}
+          <Link href="/loja/pedidos">Voltar à lista</Link>
         </p>
       </section>
     );
   }
 
-  const currentOrder = order;
-  const nextStatuses = ORDER_TRANSITIONS[currentOrder.status];
-
-  function changeStatus(status: OrderStatus) {
-    if (!canTransitionOrder(currentOrder.status, status)) {
-      push("Transição de status inválida.", "error");
-      return;
-    }
-    try {
-      const next = repo.updateOrderStatus(currentOrder.id, status);
-      refresh(next);
-      push(`Status atualizado para ${ORDER_STATUS_LABEL[status]}.`);
-    } catch (error) {
-      push(
-        error instanceof Error ? error.message : "Falha ao atualizar status.",
-        "error",
-      );
-    }
-  }
-
-  function saveTracking(event: FormEvent) {
-    event.preventDefault();
-    const code = tracking.trim();
-    if (!code) {
-      push("Informe um código de rastreio.", "error");
-      return;
-    }
-
-    if (shipment) {
-      const next = repo.updateShipmentStatus(shipment.id, "posted", {
-        trackingCode: code,
-        carrier,
-      });
-      refresh(next);
-      push("Rastreio atualizado.");
-      return;
-    }
-
-    const next = repo.createShipment({
-      orderId: currentOrder.id,
-      sellerId: currentOrder.sellerId,
-      customerId: currentOrder.customerId,
-      carrier,
-      trackingCode: code,
-      eta: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
-      status: "posted",
-      destination: `${currentOrder.city}/${currentOrder.state}`,
-      delayed: false,
-    });
-    refresh(next);
-    push("Rastreio demonstrativo inserido.");
-  }
+  const address = sellerOrder.order.shippingAddress;
 
   return (
     <>
       <header>
-        <h1 className={styles.pageTitle}>Pedido {currentOrder.code}</h1>
+        <h1 className={styles.pageTitle}>
+          Pedido {sellerOrder.order.orderNumber}
+        </h1>
         <p className={styles.pageLead}>
-          {ORDER_STATUS_LABEL[currentOrder.status]} ·{" "}
-          {formatMoney(currentOrder.totalCents)}
+          {SELLER_ORDER_STATUS_LABEL[sellerOrder.status]} ·{" "}
+          {formatMoney(sellerOrder.subtotalCents)}
         </p>
       </header>
 
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Itens</h2>
         <ul>
-          {order.items.map((item) => (
-            <li key={`${item.productId}-${item.title}`}>
-              {item.quantity}× {item.title} —{" "}
-              {formatMoney(item.unitPriceCents * item.quantity)}
+          {sellerOrder.items.map((item) => (
+            <li key={item.id}>
+              {item.quantity}× {item.productTitle} ({item.sku}) —{" "}
+              {formatMoney(item.lineTotalCents)}
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className={styles.panel}>
+        <h2 className={styles.panelTitle}>Totais</h2>
         <p>
-          Subtotal {formatMoney(order.subtotalCents)} · Frete{" "}
-          {formatMoney(order.shippingCents)} · Desconto{" "}
-          {formatMoney(order.discountCents)} · Total{" "}
-          {formatMoney(order.totalCents)}
+          Subtotal {formatMoney(sellerOrder.subtotalCents)} · Frete{" "}
+          {formatMoney(sellerOrder.shippingCents)} · Comissão{" "}
+          {formatMoney(sellerOrder.commissionCents)} · Líquido{" "}
+          {formatMoney(sellerOrder.sellerNetCents)}
         </p>
       </section>
 
-      {transaction ? (
-        <section className={styles.panel}>
-          <h2 className={styles.panelTitle}>Financeiro do pedido</h2>
+      <section className={styles.panel}>
+        <h2 className={styles.panelTitle}>Entrega</h2>
+        {address ? (
           <p>
-            Bruto {formatMoney(transaction.grossCents)} · Taxas{" "}
-            {formatMoney(transaction.feeCents)} · Comissão{" "}
-            {formatMoney(transaction.commissionCents)} · Líquido{" "}
-            {formatMoney(transaction.netCents)}
-          </p>
-        </section>
-      ) : null}
-
-      <section className={styles.panel}>
-        <h2 className={styles.panelTitle}>Timeline</h2>
-        <ol>
-          {order.timeline.map((event) => (
-            <li key={event.id}>
-              <strong>{event.label}</strong>
-              <span> — {new Date(event.at).toLocaleString("pt-BR")}</span>
-              {event.detail ? <div>{event.detail}</div> : null}
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className={styles.panel}>
-        <h2 className={styles.panelTitle}>Avançar status</h2>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {nextStatuses.length === 0 ? (
-            <p>Sem transições disponíveis.</p>
-          ) : (
-            nextStatuses.map((status) => (
-              <button
-                key={status}
-                type="button"
-                className={styles.ghostBtn}
-                onClick={() => changeStatus(status)}
-              >
-                {ORDER_STATUS_LABEL[status]}
-              </button>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className={styles.panel}>
-        <h2 className={styles.panelTitle}>Entrega / rastreio</h2>
-        {shipment ? (
-          <p>
-            {SHIPMENT_STATUS_LABEL[shipment.status]} · {shipment.carrier} ·{" "}
-            {shipment.trackingCode || "sem código"}
+            {address.recipient} — {address.street}, {address.number}
+            {address.complement ? ` - ${address.complement}` : ""} —{" "}
+            {address.neighborhood}, {address.city}/{address.state} · CEP{" "}
+            {address.postalCode}
           </p>
         ) : (
-          <p>Nenhuma entrega registrada ainda.</p>
+          <p>Endereço não disponível.</p>
         )}
-        <form className={styles.formGrid} onSubmit={saveTracking}>
-          <div className={styles.field}>
-            <label htmlFor="track-carrier">Transportadora</label>
-            <input
-              id="track-carrier"
-              value={carrier}
-              onChange={(event) => setCarrier(event.target.value)}
-            />
-          </div>
-          <div className={styles.field}>
-            <label htmlFor="track-code">Código de rastreio</label>
-            <input
-              id="track-code"
-              value={tracking}
-              onChange={(event) => setTracking(event.target.value)}
-            />
-          </div>
-          <button type="submit" className={styles.primaryBtn}>
-            Salvar rastreio demonstrativo
-          </button>
-        </form>
       </section>
     </>
   );
