@@ -73,6 +73,7 @@ function isCartItem(value: unknown): value is CartItem {
 
   return (
     typeof item.productId === "string" &&
+    typeof item.variantId === "string" &&
     typeof item.slug === "string" &&
     typeof item.name === "string" &&
     typeof item.category === "string" &&

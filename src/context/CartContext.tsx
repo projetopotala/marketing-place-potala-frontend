@@ -94,6 +94,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           ...current,
           {
             productId: input.productId,
+            variantId: input.variantId,
             slug: input.slug,
             name: input.name,
             category: input.category,
@@ -112,6 +113,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         item.productId === input.productId
           ? {
               ...item,
+              variantId: input.variantId,
               stock,
               unitPrice: input.unitPrice,
               imageSrc: input.imageSrc,

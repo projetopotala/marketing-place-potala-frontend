@@ -68,8 +68,17 @@ export function ProductCard({
       return;
     }
 
+    // Produtos vindos do catalog-service real sempre têm ao menos 1
+    // variante (CreateProductDto exige >= 1) — defaultVariantId só fica
+    // undefined pra dado mock/legado que não passou por toStorefrontProduct().
+    if (!product.defaultVariantId) {
+      setFeedback(`${product.name} está sem variante cadastrada e não pode ser comprado no momento.`);
+      return;
+    }
+
     const added = addItem({
       productId: product.id,
+      variantId: product.defaultVariantId,
       slug: product.slug,
       name: product.name,
       category: product.category,

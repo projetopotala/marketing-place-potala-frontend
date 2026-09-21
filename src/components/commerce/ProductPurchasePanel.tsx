@@ -46,9 +46,13 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
     setQuantity((current) => Math.min(Math.max(stock, 1), current + 1));
   }
 
+  // Produtos vindos do catalog-service real sempre têm ao menos 1 variante
+  // (CreateProductDto exige >= 1) — defaultVariantId só fica undefined pra
+  // dado mock/legado que não passou por toStorefrontProduct().
   function buildCartInput() {
     return {
       productId: product.id,
+      variantId: product.defaultVariantId ?? "",
       slug: product.slug,
       name: product.name,
       category: product.category,
@@ -64,6 +68,10 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
       setFeedback("Produto indisponível no momento.");
       return;
     }
+    if (!product.defaultVariantId) {
+      setFeedback("Este produto está sem variante cadastrada e não pode ser comprado no momento.");
+      return;
+    }
     const added = addItem(buildCartInput());
     if (added) {
       setFeedback(
@@ -76,6 +84,10 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
 
   function handleBuyNow() {
     if (!isReady || stock < 1) return;
+    if (!product.defaultVariantId) {
+      setFeedback("Este produto está sem variante cadastrada e não pode ser comprado no momento.");
+      return;
+    }
     const added = addItem(buildCartInput());
     if (added) {
       router.push("/checkout");

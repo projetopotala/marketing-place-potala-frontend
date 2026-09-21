@@ -68,6 +68,8 @@ export interface Product {
   longDescription?: string;
   stock?: number;
   soldCount?: number;
+  /** Id da variante padrão (catalog-service) — necessário pra adicionar ao carrinho real, ver POST /orders/checkout. Ausente em produtos que não vêm do catalog-service real. */
+  defaultVariantId?: string;
   originalPrice?: number;
   discountPercent?: number;
   seller?: ProductSeller;

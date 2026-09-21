@@ -94,8 +94,8 @@ export default function CheckoutSuccessPage() {
             Código do pedido: <strong>{order.orderId}</strong>
           </p>
           <p className={styles.text}>
-            Olá, {order.customerName}. Este é um fluxo demonstrativo — nenhum
-            pagamento real foi processado.
+            Olá, {order.customerName}. Seu pedido foi registrado no sistema —
+            nenhum pagamento real foi processado (ambiente de demonstração).
           </p>
         </div>
 

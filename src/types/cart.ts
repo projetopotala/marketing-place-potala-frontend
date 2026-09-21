@@ -1,5 +1,7 @@
 export interface CartItem {
   productId: string;
+  /** Real product-variant id (catalog-service) — obrigatório pro checkout real, ver POST /orders/checkout. */
+  variantId: string;
   slug: string;
   name: string;
   category: string;
@@ -102,6 +104,7 @@ export interface PendingCheckoutOperation {
 
 export interface AddCartItemInput {
   productId: string;
+  variantId: string;
   slug: string;
   name: string;
   category: string;

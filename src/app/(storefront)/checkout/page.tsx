@@ -3,30 +3,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useMemo, useState, type FormEvent } from "react";
-import type {
-  CheckoutPaymentMethod,
-  CurrentOrderSummary,
-  PendingCheckoutOperation,
-  ShippingOptionId,
-} from "@/types/cart";
-import {
-  calcLineTotal,
-  clearPendingCheckoutOperation,
-  createCartFingerprint,
-  createCryptoRandomId,
-  createOrderId,
-  isPendingAlreadyConfirmed,
-  ORDER_STORAGE_KEY,
-  PAYMENT_LABELS,
-  readPendingCheckoutOperation,
-  SHIPPING_OPTIONS,
-  writePendingCheckoutOperation,
-} from "@/data/cart";
+import { useId, useState, type FormEvent } from "react";
+import type { CheckoutPaymentMethod, CurrentOrderSummary, ShippingOptionId } from "@/types/cart";
+import { calcLineTotal, ORDER_STORAGE_KEY, PAYMENT_LABELS, SHIPPING_OPTIONS } from "@/data/cart";
 import { formatPrice } from "@/data/marketplace";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useAccountData } from "@/features/account/AccountDataContext";
+import { AuthGuard } from "@/components/auth/AuthGuard";
+import { checkout as checkoutApi, type OrderResponse } from "@/lib/api/orders";
+import { ApiError } from "@/lib/api/client";
 import styles from "./page.module.css";
 
 interface FormErrors {
@@ -41,43 +27,75 @@ interface FormErrors {
   state?: string;
 }
 
-function buildOrderSummary(input: {
-  orderId: string;
-  checkoutTransactionId: string;
-  items: CurrentOrderSummary["items"];
-  subtotal: number;
-  shipping: ShippingOptionId;
-  shippingLabel: string;
-  shippingCost: number;
-  total: number;
-  payment: CheckoutPaymentMethod;
-  paymentLabel: string;
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string;
-  shippingAddress: CurrentOrderSummary["shippingAddress"];
-  createdAt: string;
-}): CurrentOrderSummary {
+/**
+ * Mapeia a resposta real de POST /orders/checkout (potala-orders-service)
+ * pro mesmo formato CurrentOrderSummary que checkout/sucesso/page.tsx já
+ * sabe renderizar — nenhuma mudança foi necessária lá. Preço/título/SKU de
+ * cada item vêm sempre do servidor (nunca do que o carrinho local mandou);
+ * imageSrc/slug não existem na resposta do orders-service, então são
+ * recuperados do carrinho local pelo productId só pra exibição.
+ */
+function buildOrderSummaryFromResponse(
+  response: OrderResponse,
+  context: {
+    cartItemsByProductId: Map<string, { slug: string; imageSrc: string }>;
+    shipping: ShippingOptionId;
+    shippingLabel: string;
+    payment: CheckoutPaymentMethod;
+    paymentLabel: string;
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
+    fallbackAddress: CurrentOrderSummary["shippingAddress"];
+  },
+): CurrentOrderSummary {
+  const items = response.sellerOrders.flatMap((sellerOrder) =>
+    sellerOrder.items.map((item) => {
+      const local = context.cartItemsByProductId.get(item.productId);
+      return {
+        productId: item.productId,
+        slug: local?.slug ?? item.productId,
+        name: item.productTitle,
+        imageSrc: local?.imageSrc ?? "/images/potala/logo-mark.png",
+        quantity: item.quantity,
+        unitPrice: item.unitPriceCents / 100,
+        lineTotal: item.lineTotalCents / 100,
+      };
+    }),
+  );
+
+  const address = response.shippingAddress;
+
   return {
-    orderId: input.orderId,
-    checkoutTransactionId: input.checkoutTransactionId,
-    items: input.items,
-    subtotal: input.subtotal,
-    shippingOption: input.shipping,
-    shippingLabel: input.shippingLabel,
-    shippingCost: input.shippingCost,
-    total: input.total,
-    paymentMethod: input.payment,
-    paymentLabel: input.paymentLabel,
-    customerName: input.customerName,
-    customerEmail: input.customerEmail,
-    customerPhone: input.customerPhone,
-    shippingAddress: input.shippingAddress,
-    createdAt: input.createdAt,
+    orderId: response.orderNumber,
+    checkoutTransactionId: response.id,
+    items,
+    subtotal: response.subtotalCents / 100,
+    shippingOption: context.shipping,
+    shippingLabel: context.shippingLabel,
+    shippingCost: response.shippingCents / 100,
+    total: response.totalCents / 100,
+    paymentMethod: context.payment,
+    paymentLabel: context.paymentLabel,
+    customerName: context.customerName,
+    customerEmail: context.customerEmail,
+    customerPhone: context.customerPhone,
+    shippingAddress: address
+      ? {
+          cep: address.postalCode,
+          street: address.street,
+          number: address.number,
+          complement: address.complement ?? undefined,
+          neighborhood: address.neighborhood,
+          city: address.city,
+          state: address.state,
+        }
+      : context.fallbackAddress,
+    createdAt: response.createdAt,
   };
 }
 
-export default function CheckoutPage() {
+function CheckoutForm() {
   const router = useRouter();
   const { items, subtotal, isReady, consumeCheckoutItems } = useCart();
   const { user } = useAuth();
@@ -104,13 +122,14 @@ export default function CheckoutPage() {
   const [status, setStatus] = useState<string | null>(null);
 
   const shippingOption = SHIPPING_OPTIONS[shipping];
-  const total = useMemo(
-    () => Number((subtotal + shippingOption.cost).toFixed(2)),
-    [subtotal, shippingOption.cost],
-  );
+  // orders-service ainda não calcula frete real nesta v1 (Order.shippingCents
+  // sempre 0, ver README do serviço) — a escolha de prazo continua na UI
+  // (informativa), mas o total exibido aqui (e o total real devolvido pelo
+  // pedido confirmado) não soma o custo fixo de SHIPPING_OPTIONS, pra não
+  // divergir do valor que o backend efetivamente cobra.
+  const total = subtotal;
 
   const isCustomer = user?.role === "customer";
-  const checkoutUserId = isCustomer ? (user?.userId ?? null) : null;
 
   function validate(): FormErrors {
     const next: FormErrors = {};
@@ -136,79 +155,7 @@ export default function CheckoutPage() {
     return next;
   }
 
-  function resolvePendingOperation(
-    cartFingerprint: string,
-  ):
-    | { ok: true; operation: PendingCheckoutOperation }
-    | { ok: false; error: string } {
-    const existing = readPendingCheckoutOperation();
-
-    if (existing) {
-      if (isPendingAlreadyConfirmed(existing)) {
-        // Pendência já confirmada: limpeza best-effort e nova operação.
-        clearPendingCheckoutOperation();
-      } else if (existing.userId === checkoutUserId) {
-        // Mesmo usuário: reutiliza snapshot (IDs estáveis).
-        return {
-          ok: true,
-          operation: existing,
-        };
-      }
-    }
-
-    const order = buildOrderSummary({
-      orderId: createOrderId(),
-      checkoutTransactionId: createCryptoRandomId(),
-      items: items.map((item) => ({
-        productId: item.productId,
-        slug: item.slug,
-        name: item.name,
-        imageSrc: item.imageSrc,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        lineTotal: calcLineTotal(item.unitPrice, item.quantity),
-      })),
-      subtotal,
-      shipping,
-      shippingLabel: shippingOption.label,
-      shippingCost: shippingOption.cost,
-      total,
-      payment,
-      paymentLabel: PAYMENT_LABELS[payment],
-      customerName: fullName.trim(),
-      customerEmail: email.trim(),
-      customerPhone: phone.trim(),
-      shippingAddress: {
-        cep: cep.trim(),
-        street: street.trim(),
-        number: number.trim(),
-        complement: complement.trim() || undefined,
-        neighborhood: neighborhood.trim(),
-        city: city.trim(),
-        state: state.trim().toUpperCase(),
-      },
-      createdAt: new Date().toISOString(),
-    });
-
-    const operation: PendingCheckoutOperation = {
-      version: 1,
-      userId: checkoutUserId,
-      cartFingerprint,
-      order,
-    };
-
-    if (!writePendingCheckoutOperation(operation)) {
-      return {
-        ok: false,
-        error:
-          "Não foi possível registrar a operação de checkout neste navegador. O pedido não foi gravado — tente novamente.",
-      };
-    }
-
-    return { ok: true, operation };
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextErrors = validate();
     setErrors(nextErrors);
@@ -229,62 +176,94 @@ export default function CheckoutPage() {
       return;
     }
 
+    const missingVariant = items.find((item) => !item.variantId);
+    if (missingVariant) {
+      setStatus(
+        `"${missingVariant.name}" está sem variante associada — remova e adicione o produto novamente ao carrinho.`,
+      );
+      return;
+    }
+
     setSubmitting(true);
     setStatus(null);
 
-    const cartFingerprint = createCartFingerprint(items);
-    const resolved = resolvePendingOperation(cartFingerprint);
-    if (!resolved.ok) {
-      setSubmitting(false);
-      setStatus(resolved.error);
-      return;
-    }
-
-    let canonicalOrder = resolved.operation.order;
-
-    if (isCustomer) {
-      const result = appendOrderFromCheckout(canonicalOrder);
-      if (result.status === "failed" || result.status === "conflict") {
-        setSubmitting(false);
-        setStatus(result.error);
-        return;
-      }
-
-      if (result.orderId !== canonicalOrder.orderId) {
-        canonicalOrder = {
-          ...canonicalOrder,
-          orderId: result.orderId,
-        };
-        writePendingCheckoutOperation({
-          ...resolved.operation,
-          order: canonicalOrder,
-        });
-      }
-    }
+    const cartItemsByProductId = new Map(
+      items.map((item) => [item.productId, { slug: item.slug, imageSrc: item.imageSrc }]),
+    );
+    const fallbackAddress = {
+      cep: cep.trim(),
+      street: street.trim(),
+      number: number.trim(),
+      complement: complement.trim() || undefined,
+      neighborhood: neighborhood.trim(),
+      city: city.trim(),
+      state: state.trim().toUpperCase(),
+    };
 
     try {
-      window.sessionStorage.setItem(
-        ORDER_STORAGE_KEY,
-        JSON.stringify(canonicalOrder),
+      // Preço/título/SKU nunca vêm daqui — o servidor resolve tudo a
+      // partir de productId/variantId (ver CreateCheckoutDto no
+      // orders-service). Sem chave de idempotência nesta v1: um retry de
+      // rede cria um pedido novo — o guard `submitting` acima evita o caso
+      // mais comum (duplo clique), mas não uma falha de rede a meio do
+      // caminho (gap conhecido, ver status do projeto).
+      const response = await checkoutApi({
+        items: items.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+        })),
+        shippingAddress: {
+          recipient: fullName.trim(),
+          street: street.trim(),
+          number: number.trim(),
+          complement: complement.trim() || undefined,
+          neighborhood: neighborhood.trim(),
+          city: city.trim(),
+          state: state.trim().toUpperCase(),
+          postalCode: cep.trim(),
+        },
+      });
+
+      const canonicalOrder = buildOrderSummaryFromResponse(response, {
+        cartItemsByProductId,
+        shipping,
+        shippingLabel: shippingOption.label,
+        payment,
+        paymentLabel: PAYMENT_LABELS[payment],
+        customerName: fullName.trim(),
+        customerEmail: email.trim(),
+        customerPhone: phone.trim(),
+        fallbackAddress,
+      });
+
+      if (isCustomer) {
+        // Best-effort: histórico demonstrativo da conta (localStorage,
+        // AccountDataContext — ainda não migrado pra API real, ver status
+        // do projeto), em paralelo ao pedido real já gravado no
+        // orders-service. Se isso falhar o pedido real já existe de
+        // qualquer forma, então não bloqueia a confirmação.
+        appendOrderFromCheckout(canonicalOrder);
+      }
+
+      window.sessionStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(canonicalOrder));
+
+      consumeCheckoutItems(
+        canonicalOrder.items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
       );
-    } catch {
+
+      router.push("/checkout/sucesso");
+    } catch (err) {
       setSubmitting(false);
       setStatus(
-        "Não foi possível guardar a confirmação do pedido neste navegador. Tente novamente.",
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível finalizar o pedido. Tente novamente.",
       );
-      return;
     }
-
-    clearPendingCheckoutOperation();
-
-    consumeCheckoutItems(
-      canonicalOrder.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-      })),
-    );
-
-    router.push("/checkout/sucesso");
   }
 
   if (!isReady) {
@@ -531,9 +510,7 @@ export default function CheckoutPage() {
                       />
                       <span>
                         <strong>{option.label}</strong>
-                        <small>
-                          {option.description} · {formatPrice(option.cost)}
-                        </small>
+                        <small>{option.description}</small>
                       </span>
                     </label>
                   ),
@@ -613,7 +590,7 @@ export default function CheckoutPage() {
               </div>
               <div>
                 <dt>Entrega ({shippingOption.label})</dt>
-                <dd>{formatPrice(shippingOption.cost)}</dd>
+                <dd>Grátis (nesta versão)</dd>
               </div>
               <div className={styles.totalRow}>
                 <dt>Total</dt>
@@ -647,5 +624,13 @@ export default function CheckoutPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <AuthGuard>
+      <CheckoutForm />
+    </AuthGuard>
   );
 }
