@@ -1,54 +1,67 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  getProductBySlug,
-  getProductImages,
-  getRelatedProducts,
-  PRODUCTS,
-} from "@/data/marketplace";
 import { ProductGallery } from "@/components/commerce/ProductGallery";
 import { ProductInformation } from "@/components/commerce/ProductInformation";
 import { ProductPurchasePanel } from "@/components/commerce/ProductPurchasePanel";
 import { ProductReviews } from "@/components/commerce/ProductReviews";
 import { RelatedProducts } from "@/components/commerce/RelatedProducts";
+import {
+  getPublicProduct,
+  listPublicProducts,
+  toStorefrontProduct,
+} from "@/lib/api/catalog-public";
 import styles from "./page.module.css";
 
-export function generateStaticParams() {
-  return PRODUCTS.map((product) => ({ slug: product.slug }));
-}
-
+/**
+ * Rewritten this session (Fase 1 do plano até 05/10) — real produto via
+ * GET /public/products/:id (catalog-service). Route param renamed from
+ * [slug] to [id]: Product.slug only unique per vendedor
+ * (`@@unique([sellerId, slug])`), não globalmente — ver o comentário em
+ * catalog-public.ts's toStorefrontProduct. No `generateStaticParams`:
+ * produtos são dinâmicos agora (criados/publicados pelo vendedor a
+ * qualquer momento), não uma lista fixa no build.
+ */
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ id: string }>;
 }) {
-  const { slug } = await params;
-  const product = getProductBySlug(slug);
+  const { id } = await params;
+  const product = await getPublicProduct(id);
 
   if (!product) {
     return { title: "Produto não encontrado | Instituto Potala Marketplace" };
   }
 
   return {
-    title: `${product.name} | Instituto Potala Marketplace`,
-    description: product.description ?? product.name,
+    title: `${product.title} | Instituto Potala Marketplace`,
+    description: product.description || product.title,
   };
 }
 
 export default async function ProductPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ id: string }>;
 }) {
-  const { slug } = await params;
-  const product = getProductBySlug(slug);
+  const { id } = await params;
+  const apiProduct = await getPublicProduct(id);
 
-  if (!product) {
+  if (!apiProduct) {
     notFound();
   }
 
-  const images = getProductImages(product);
-  const related = getRelatedProducts(product, 4);
+  const product = toStorefrontProduct(apiProduct);
+  const images = product.images ?? [];
+
+  const relatedPage = await listPublicProducts({
+    categoryId: apiProduct.category.id,
+    limit: 5,
+  });
+  const related = relatedPage.items
+    .filter((p) => p.id !== apiProduct.id)
+    .slice(0, 4)
+    .map(toStorefrontProduct);
 
   return (
     <div className={styles.page}>
@@ -59,7 +72,7 @@ export default async function ProductPage({
               <Link href="/">Início</Link>
             </li>
             <li>
-              <Link href={`/categoria/${product.categoryId}`}>
+              <Link href={`/categoria/${apiProduct.category.slug}`}>
                 {product.category}
               </Link>
             </li>

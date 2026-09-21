@@ -3,11 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useId, useTransition } from "react";
-import { CATALOG_CATEGORIES } from "@/features/catalog/categories";
 import {
   buildCatalogSearchParams,
   type ProductSortOrder,
 } from "@/features/catalog/selectors";
+
+export interface CatalogToolbarCategory {
+  id: string;
+  name: string;
+}
 
 interface CatalogToolbarProps {
   /** When set, category is fixed by the route (not a filter control). */
@@ -19,6 +23,12 @@ interface CatalogToolbarProps {
   currentQuery: string;
   currentOrder: ProductSortOrder;
   currentCategoryId?: string;
+  /**
+   * Real catalog-service categories (GET /public/categories), threaded in
+   * by the page — replaces the old hardcoded CATALOG_CATEGORIES import so
+   * this dropdown always matches whatever the admin has actually created.
+   */
+  categories: CatalogToolbarCategory[];
 }
 
 const ORDER_OPTIONS: { value: ProductSortOrder; label: string }[] = [
@@ -36,6 +46,7 @@ export function CatalogToolbar({
   currentQuery,
   currentOrder,
   currentCategoryId,
+  categories,
 }: CatalogToolbarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -182,7 +193,7 @@ export function CatalogToolbar({
               }}
             >
               <option value="">Todas</option>
-              {CATALOG_CATEGORIES.map((category) => (
+              {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
                 </option>

@@ -1,10 +1,23 @@
 import Link from "next/link";
-import { getFeaturedProducts } from "@/data/marketplace";
 import { FeaturedProductsCarousel } from "@/components/storefront/FeaturedProductsCarousel";
 import { ArrowRightIcon } from "@/components/storefront/icons";
+import { listPublicProducts, toStorefrontProduct } from "@/lib/api/catalog-public";
 
-export function FeaturedProducts() {
-  const products = getFeaturedProducts();
+/**
+ * Rewritten this session (Fase 1 do plano até 05/10) — produtos reais
+ * (GET /public/products) em vez do mock. `Product.featured` existe no
+ * schema do catalog-service, mas não há hoje nenhum endpoint pra ativá-lo
+ * (mesmo gap do "sem upload de imagem") — então "destaque" aqui significa
+ * "publicados mais recentemente", não uma curadoria manual. Revisitar
+ * quando/se `featured` ganhar um jeito de ser definido pelo vendedor/admin.
+ */
+export async function FeaturedProducts() {
+  const page = await listPublicProducts({ limit: 8 });
+  const products = page.items.map(toStorefrontProduct);
+
+  if (products.length === 0) {
+    return null;
+  }
 
   return (
     <section

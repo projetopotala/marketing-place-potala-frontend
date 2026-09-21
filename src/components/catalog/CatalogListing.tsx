@@ -1,5 +1,8 @@
 import { ProductCard } from "@/components/storefront/ProductCard";
-import { CatalogToolbar } from "@/components/catalog/CatalogToolbar";
+import {
+  CatalogToolbar,
+  type CatalogToolbarCategory,
+} from "@/components/catalog/CatalogToolbar";
 import { FadeIn } from "@/components/ui/motion/FadeIn";
 import {
   StaggerContainer,
@@ -29,6 +32,8 @@ interface CatalogListingProps {
   emptyActionHref?: string;
   emptyActionLabel?: string;
   demoNote?: string;
+  /** Real categories for the filter dropdown — see CatalogToolbarCategory. */
+  categories: CatalogToolbarCategory[];
 }
 
 function ToolbarFallback() {
@@ -53,7 +58,8 @@ export function CatalogListing({
   showCategoryFilter = true,
   emptyActionHref = "/catalogo",
   emptyActionLabel = "Ver todos os produtos",
-  demoNote = "Catálogo e preços demonstrativos — não sincronizados com o painel administrativo.",
+  demoNote = "Catálogo do Instituto Potala — produtos publicados pelos vendedores.",
+  categories,
 }: CatalogListingProps) {
   return (
     <div className="catalog-listing potala-wide-container py-8 md:py-10">
@@ -103,6 +109,7 @@ export function CatalogListing({
           lockedCategoryId={lockedCategoryId}
           lockedCollection={lockedCollection}
           showCategoryFilter={showCategoryFilter}
+          categories={categories}
         />
       </Suspense>
 
