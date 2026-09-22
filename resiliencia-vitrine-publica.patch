@@ -1,0 +1,154 @@
+diff --git a/src/app/(storefront)/error.tsx b/src/app/(storefront)/error.tsx
+new file mode 100644
+index 0000000..50d4935
+--- /dev/null
++++ b/src/app/(storefront)/error.tsx
+@@ -0,0 +1,45 @@
++"use client";
++
++import { useEffect } from "react";
++
++/**
++ * Safety net for the storefront route group. Most of the "backend is
++ * cold/unreachable" cases are already handled upstream now (see
++ * lib/api/catalog-public.ts — listPublicCategories/listPublicProducts/
++ * getPublicProduct degrade to an empty result instead of throwing), so in
++ * practice a shopper should rarely hit this. This exists for whatever is
++ * left uncovered: header/footer (AnnouncementBar, MarketplaceHeader,
++ * MarketplaceFooter) still render from the layout above this boundary —
++ * only the page content is replaced — so navigation stays usable even when
++ * one page's data genuinely can't be recovered.
++ */
++export default function StorefrontError({
++  error,
++  reset,
++}: {
++  error: Error & { digest?: string };
++  reset: () => void;
++}) {
++  useEffect(() => {
++    console.error("[storefront/error.tsx] Unhandled error rendering a storefront page:", error);
++  }, [error]);
++
++  return (
++    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 bg-potala-bg px-6 py-16 text-center">
++      <h1 className="font-serif text-2xl font-semibold text-potala-cream md:text-3xl">
++        Não conseguimos carregar esta página agora
++      </h1>
++      <p className="max-w-md text-sm text-potala-cream/80">
++        Pode ser algo temporário no nosso sistema. Tente novamente em alguns
++        instantes — o resto do site continua disponível pelo menu acima.
++      </p>
++      <button
++        type="button"
++        onClick={() => reset()}
++        className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-full border border-potala-gold/45 px-6 text-sm text-potala-gold transition hover:bg-potala-gold/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-potala-gold-light"
++      >
++        Tentar novamente
++      </button>
++    </div>
++  );
++}
+diff --git a/src/lib/api/catalog-public.ts b/src/lib/api/catalog-public.ts
+index b7604f4..f54cf74 100644
+--- a/src/lib/api/catalog-public.ts
++++ b/src/lib/api/catalog-public.ts
+@@ -56,10 +56,26 @@ export interface Paginated<T> {
+   pageInfo: PageInfo;
+ }
+ 
+-/** GET /public/categories — active categories, no auth. */
++/**
++ * GET /public/categories — active categories, no auth.
++ *
++ * Swallows any failure (network error, gateway 502/503/504, catalog-service
++ * cold-starting on Render's free tier, etc.) and returns an empty list
++ * instead of throwing. This is a storefront page used by anonymous
++ * shoppers — every caller here (FeaturedCategories, categoria/[slug],
++ * catalogo, novidades, ofertas) already treats an empty result as "nothing
++ * to show" and degrades gracefully (renders `null`/an empty state) rather
++ * than crashing the whole page with a 500. Logged so the failure is still
++ * visible in Vercel's function logs, just no longer fatal to the request.
++ */
+ export async function listPublicCategories(): Promise<PublicCategory[]> {
+-  const result = await apiFetch<PublicCategory[]>("/public/categories");
+-  return result ?? [];
++  try {
++    const result = await apiFetch<PublicCategory[]>("/public/categories");
++    return result ?? [];
++  } catch (err) {
++    console.error("[catalog-public] listPublicCategories failed, degrading to empty list:", err);
++    return [];
++  }
+ }
+ 
+ export interface ListPublicProductsParams {
+@@ -69,7 +85,18 @@ export interface ListPublicProductsParams {
+   q?: string;
+ }
+ 
+-/** GET /public/products — ACTIVE products only, cursor-paginated, no auth. */
++const EMPTY_PRODUCTS_PAGE: Paginated<PublicProduct> = {
++  items: [],
++  pageInfo: { hasNextPage: false, nextCursor: null },
++};
++
++/**
++ * GET /public/products — ACTIVE products only, cursor-paginated, no auth.
++ *
++ * Same reasoning as `listPublicCategories` above: degrades to an empty page
++ * instead of throwing on a backend/gateway failure, so a cold catalog-service
++ * shows an empty section instead of taking down the whole storefront page.
++ */
+ export async function listPublicProducts(
+   params: ListPublicProductsParams = {},
+ ): Promise<Paginated<PublicProduct>> {
+@@ -79,10 +106,15 @@ export async function listPublicProducts(
+   if (params.categoryId) query.set("categoryId", params.categoryId);
+   if (params.q) query.set("q", params.q);
+   const qs = query.toString();
+-  const result = await apiFetch<Paginated<PublicProduct>>(
+-    `/public/products${qs ? `?${qs}` : ""}`,
+-  );
+-  return result ?? { items: [], pageInfo: { hasNextPage: false, nextCursor: null } };
++  try {
++    const result = await apiFetch<Paginated<PublicProduct>>(
++      `/public/products${qs ? `?${qs}` : ""}`,
++    );
++    return result ?? EMPTY_PRODUCTS_PAGE;
++  } catch (err) {
++    console.error("[catalog-public] listPublicProducts failed, degrading to empty page:", err);
++    return EMPTY_PRODUCTS_PAGE;
++  }
+ }
+ 
+ /**
+@@ -90,16 +122,25 @@ export async function listPublicProducts(
+  * pages can just call Next's `notFound()` without a try/catch. A
+  * DRAFT/INACTIVE product 404s here exactly like a nonexistent id — see
+  * catalog-service's ProductsService.getPublishedById.
++ *
++ * Also returns null (instead of throwing) for any other failure — a
++ * network error or a 502/503/504 from a cold/unreachable catalog-service
++ * included. There's no product data to render either way, so the page
++ * falls back to `notFound()` rather than crashing the whole request with a
++ * 500. Known simplification: a shopper sees the same "product not found"
++ * page whether the product genuinely doesn't exist or the backend is
++ * temporarily down — good enough for now, logged below so the real cause
++ * stays visible in Vercel's function logs.
+  */
+ export async function getPublicProduct(id: string): Promise<PublicProduct | null> {
+   try {
+     return await apiFetch<PublicProduct>(`/public/products/${encodeURIComponent(id)}`);
+   } catch (err) {
+     const status = (err as { status?: number }).status;
+-    if (status === 404 || status === 400) {
+-      return null;
++    if (status !== 404 && status !== 400) {
++      console.error(`[catalog-public] getPublicProduct(${id}) failed, degrading to not-found:`, err);
+     }
+-    throw err;
++    return null;
+   }
+ }
+ 
