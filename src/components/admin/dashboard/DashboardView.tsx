@@ -1,81 +1,185 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChartNoAxesCombined,
+  ClipboardCheck,
   Package,
-  ShoppingBag,
   Store,
-  Truck,
-  WalletCards,
+  Tags,
 } from "lucide-react";
-import { useAdminData } from "@/features/admin/hooks/useAdminData";
 import {
-  selectAlerts,
-  selectCategorySales,
-  selectDashboardMetrics,
-  selectFeaturedSellers,
-  selectFinancialSummary,
-  selectPendingApprovals,
-  selectRecentOrders,
-  selectSalesPerformance,
-  selectTopProducts,
-} from "@/features/admin/selectors/dashboardSelectors";
-import {
-  ORDER_STATUS_LABEL,
-  SELLER_STATUS_LABEL,
-} from "@/features/admin/domain/status";
-import { formatMoney } from "@/features/admin/utils/currency";
+  ADMIN_SELLER_STATUS_LABEL,
+  listAdminSellers,
+  listAdminCategories,
+  type AdminSeller,
+  type AdminCategory,
+} from "@/lib/api/admin";
+import { listPublicProducts } from "@/lib/api/catalog-public";
+import { ApiError } from "@/lib/api/client";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
+import { AdminMetricCard } from "@/components/admin/shared/AdminMetricCard";
 import {
-  AdminMetricCard,
-} from "@/components/admin/shared/AdminMetricCard";
-import { AdminStatusBadge } from "@/components/admin/shared/AdminStatusBadge";
+  AdminStatusBadge,
+  AdminEmptyState,
+} from "@/components/admin/shared/AdminStatusBadge";
 import { sharedStyles } from "@/components/admin/shared/AdminDataTable";
-import { SalesPerformanceChart } from "@/components/admin/charts/SalesPerformanceChart";
-import { SalesByCategoryChart } from "@/components/admin/charts/SalesByCategoryChart";
-import { MarketplaceGrowthChart } from "@/components/admin/charts/MarketplaceGrowthChart";
 import { FadeIn } from "@/components/ui/motion/FadeIn";
 import {
   StaggerContainer,
   StaggerItem,
 } from "@/components/ui/motion/StaggerContainer";
 import adminStyles from "@/components/admin/admin.module.css";
-import type { SellerStatus } from "@/features/admin/domain/types";
 import type { LucideIcon } from "lucide-react";
 
-function sellerTone(status: SellerStatus) {
-  if (status === "active") return "success" as const;
-  if (status === "pending") return "warning" as const;
-  if (status === "suspended") return "danger" as const;
+const LIMIT = 100;
+
+function sellerTone(status: AdminSeller["status"]) {
+  if (status === "ACTIVE") return "success" as const;
+  if (status === "PENDING") return "warning" as const;
+  if (status === "SUSPENDED") return "danger" as const;
   return "muted" as const;
+}
+
+function formatCommission(bps: number | null): string {
+  if (bps == null) return "—";
+  return `${(bps / 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("pt-BR");
 }
 
 const METRIC_ICONS: Record<string, LucideIcon> = {
   sellers: Store,
+  approvals: ClipboardCheck,
+  categories: Tags,
   products: Package,
-  "orders-today": ShoppingBag,
-  "sales-month": ChartNoAxesCombined,
-  revenue: WalletCards,
-  shipments: Truck,
 };
 
+/**
+ * Reescrito nesta sessão pra usar dado real (ver "dashboard do admin —
+ * versão enxuta real" em status-migracao-microservicos.md, Claude
+ * Project). O backend só tem dois endpoints de admin de verdade hoje
+ * (GET /admin/sellers e GET /admin/categories) — não existe nenhum
+ * endpoint admin-wide de pedidos, financeiro ou produtos-por-vendedor em
+ * nenhum dos 4 serviços (confirmado por inspeção direta do código-fonte
+ * de cada um). Por isso este painel ficou bem mais enxuto que o mock
+ * anterior: sem gráficos, sem financeiro, sem "pedidos recentes" admin,
+ * sem "top produtos" — só o que dá pra sustentar com dado real hoje:
+ * vendedores (com contagem por status), aprovações pendentes, categorias
+ * e total de produtos ativos na vitrine pública.
+ */
 export function DashboardView() {
-  const { db, isHydrated } = useAdminData();
-  const [days, setDays] = useState(30);
+  const [sellers, setSellers] = useState<AdminSeller[] | null>(null);
+  const [sellersHasMore, setSellersHasMore] = useState(false);
+  const [categories, setCategories] = useState<AdminCategory[] | null>(null);
+  const [productsCount, setProductsCount] = useState<number | null>(null);
+  const [productsHasMore, setProductsHasMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const metrics = useMemo(() => selectDashboardMetrics(db), [db]);
-  const sales = useMemo(() => selectSalesPerformance(db, days), [db, days]);
-  const categories = useMemo(() => selectCategorySales(db), [db]);
-  const featured = useMemo(() => selectFeaturedSellers(db), [db]);
-  const recent = useMemo(() => selectRecentOrders(db), [db]);
-  const financial = useMemo(() => selectFinancialSummary(db), [db]);
-  const alerts = useMemo(() => selectAlerts(db), [db]);
-  const approvals = useMemo(() => selectPendingApprovals(db), [db]);
-  const topProducts = useMemo(() => selectTopProducts(db), [db]);
+  useEffect(() => {
+    let cancelled = false;
 
-  if (!isHydrated) {
+    Promise.all([
+      listAdminSellers({ limit: LIMIT }),
+      listAdminCategories(),
+      listPublicProducts({ limit: LIMIT }),
+    ])
+      .then(([sellersPage, categoriesResult, productsPage]) => {
+        if (cancelled) return;
+        setSellers(sellersPage.items);
+        setSellersHasMore(sellersPage.pageInfo.hasNextPage);
+        setCategories(categoriesResult);
+        setProductsCount(productsPage.items.length);
+        setProductsHasMore(productsPage.pageInfo.hasNextPage);
+      })
+      .catch((err) => {
+        console.error("[admin-dashboard] falha ao carregar indicadores:", err);
+        if (!cancelled) {
+          setError(
+            err instanceof ApiError
+              ? err.message
+              : "Não foi possível carregar os indicadores do painel.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sellerCounts = useMemo(() => {
+    const counts = { ACTIVE: 0, PENDING: 0, SUSPENDED: 0, REJECTED: 0 };
+    for (const seller of sellers ?? []) {
+      counts[seller.status] += 1;
+    }
+    return counts;
+  }, [sellers]);
+
+  const pendingSellers = useMemo(
+    () => (sellers ?? []).filter((seller) => seller.status === "PENDING"),
+    [sellers],
+  );
+
+  const recentSellers = useMemo(
+    () =>
+      [...(sellers ?? [])]
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
+        .slice(0, 5),
+    [sellers],
+  );
+
+  const categoryCounts = useMemo(() => {
+    const list = categories ?? [];
+    const active = list.filter((category) => category.status === "ACTIVE").length;
+    return { total: list.length, active, inactive: list.length - active };
+  }, [categories]);
+
+  const metrics = [
+    {
+      id: "sellers",
+      label: "Vendedores",
+      value: sellers ? `${sellers.length}${sellersHasMore ? "+" : ""}` : "…",
+      hint: sellers
+        ? `${sellerCounts.ACTIVE} ativos · ${sellerCounts.PENDING} pendentes · ${sellerCounts.SUSPENDED} suspensos`
+        : "Carregando…",
+    },
+    {
+      id: "approvals",
+      label: "Aprovações pendentes",
+      value: sellers ? String(pendingSellers.length) : "…",
+      hint: sellersHasMore
+        ? "Pode haver mais em outras páginas"
+        : "De todos os vendedores cadastrados",
+    },
+    {
+      id: "categories",
+      label: "Categorias",
+      value: categories ? String(categoryCounts.total) : "…",
+      hint: categories
+        ? `${categoryCounts.active} ativas · ${categoryCounts.inactive} inativas`
+        : "Carregando…",
+    },
+    {
+      id: "products",
+      label: "Produtos ativos",
+      value:
+        productsCount != null ? `${productsCount}${productsHasMore ? "+" : ""}` : "…",
+      hint: "Na vitrine pública",
+    },
+  ];
+
+  if (isLoading && !sellers && !categories && productsCount == null) {
     return <div className={sharedStyles.skeleton} aria-busy="true" />;
   }
 
@@ -84,12 +188,16 @@ export function DashboardView() {
       <FadeIn>
         <AdminPageHeader
           title="Painel do Marketplace"
-          description="Visão geral e controle completo do seu ecossistema espiritual"
+          description="Indicadores reais de vendedores, categorias e produtos ativos"
           icon={
             <ChartNoAxesCombined size={18} strokeWidth={1.75} aria-hidden="true" />
           }
         />
       </FadeIn>
+
+      {error ? (
+        <AdminEmptyState title="Não foi possível carregar tudo" description={error} />
+      ) : null}
 
       <StaggerContainer className={sharedStyles.metrics}>
         {metrics.map((metric) => (
@@ -104,193 +212,72 @@ export function DashboardView() {
         ))}
       </StaggerContainer>
 
-      <section className={adminStyles.chartsRow} aria-label="Gráficos">
-        <div className={adminStyles.panel}>
-          <div className={adminStyles.panelHead}>
-            <h2 className={adminStyles.panelTitle}>Desempenho de Vendas</h2>
-            <label>
-              <span className="sr-only">Período</span>
-              <select
-                className={adminStyles.select}
-                value={days}
-                onChange={(event) => setDays(Number(event.target.value))}
-                aria-label="Período do gráfico"
-              >
-                <option value={7}>Últimos 7 dias</option>
-                <option value={30}>Últimos 30 dias</option>
-                <option value={90}>Últimos 90 dias</option>
-              </select>
-            </label>
-          </div>
-          <SalesPerformanceChart data={sales} />
-        </div>
-
-        <div className={adminStyles.panel}>
-          <div className={adminStyles.panelHead}>
-            <h2 className={adminStyles.panelTitle}>Vendas por Categoria</h2>
-          </div>
-          <SalesByCategoryChart data={categories} />
-        </div>
-
-        <div className={adminStyles.panel}>
-          <div className={adminStyles.panelHead}>
-            <h2 className={adminStyles.panelTitle}>Crescimento do marketplace</h2>
-          </div>
-          <MarketplaceGrowthChart data={sales} />
-        </div>
-      </section>
-
       <section className={adminStyles.tablesRow}>
         <div className={adminStyles.panel}>
           <div className={adminStyles.panelHead}>
-            <h2 className={adminStyles.panelTitle}>Vendedores em destaque</h2>
+            <h2 className={adminStyles.panelTitle}>Vendedores recentes</h2>
             <Link href="/admin/vendedores" className={sharedStyles.linkBtn}>
               Ver todos
             </Link>
           </div>
           <div className={adminStyles.tableScroll}>
-            <table className={adminStyles.table}>
-              <thead>
-                <tr>
-                  <th>Loja</th>
-                  <th>Status</th>
-                  <th>Produtos</th>
-                  <th>Pedidos</th>
-                  <th>Comissão</th>
-                </tr>
-              </thead>
-              <tbody>
-                {featured.map((seller) => (
-                  <tr key={seller.id}>
-                    <td>
-                      <Link
-                        href={`/admin/vendedores/${seller.id}`}
-                        className={sharedStyles.linkBtn}
-                      >
-                        {seller.name}
-                      </Link>
-                    </td>
-                    <td>
-                      <AdminStatusBadge
-                        label={SELLER_STATUS_LABEL[seller.status]}
-                        tone={sellerTone(seller.status)}
-                      />
-                    </td>
-                    <td>{seller.products}</td>
-                    <td>{seller.orders}</td>
-                    <td>{seller.commission}%</td>
+            {recentSellers.length === 0 ? (
+              <AdminEmptyState title="Nenhum vendedor cadastrado ainda" />
+            ) : (
+              <table className={adminStyles.table}>
+                <thead>
+                  <tr>
+                    <th>Loja</th>
+                    <th>Status</th>
+                    <th>Comissão</th>
+                    <th>Cadastrado em</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {recentSellers.map((seller) => (
+                    <tr key={seller.id}>
+                      <td>{seller.tradeName}</td>
+                      <td>
+                        <AdminStatusBadge
+                          label={ADMIN_SELLER_STATUS_LABEL[seller.status]}
+                          tone={sellerTone(seller.status)}
+                        />
+                      </td>
+                      <td>{formatCommission(seller.commissionBps)}</td>
+                      <td>{formatDate(seller.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
         <div className={adminStyles.panel}>
           <div className={adminStyles.panelHead}>
-            <h2 className={adminStyles.panelTitle}>Pedidos recentes</h2>
-            <Link href="/admin/pedidos" className={sharedStyles.linkBtn}>
+            <h2 className={adminStyles.panelTitle}>Aprovações pendentes</h2>
+            <Link href="/admin/vendedores" className={sharedStyles.linkBtn}>
               Ver todos
             </Link>
           </div>
-          <div className={adminStyles.tableScroll}>
-            <table className={adminStyles.table}>
-              <thead>
-                <tr>
-                  <th>Pedido</th>
-                  <th>Cliente</th>
-                  <th>Valor</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map((order) => (
-                  <tr key={order.id}>
-                    <td>
-                      <Link
-                        href={`/admin/pedidos/${order.id}`}
-                        className={sharedStyles.linkBtn}
-                      >
-                        {order.code}
-                      </Link>
-                    </td>
-                    <td>{order.customer}</td>
-                    <td>{formatMoney(order.amountCents)}</td>
-                    <td>
-                      <AdminStatusBadge
-                        label={ORDER_STATUS_LABEL[order.status]}
-                        tone="info"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section className={adminStyles.bottomRow}>
-        <div className={adminStyles.panel}>
-          <h2 className={adminStyles.panelTitle}>Resumo financeiro</h2>
-          <div className={adminStyles.financeList}>
-            {financial.map((item) => (
-              <div key={item.id} className={adminStyles.financeRow}>
-                <span className={adminStyles.financeLabel}>{item.label}</span>
-                <span className={adminStyles.financeValue}>
-                  {formatMoney(item.valueCents)}
-                </span>
-              </div>
-            ))}
-          </div>
-          <Link href="/admin/financeiro" className={sharedStyles.linkBtn}>
-            Ver financeiro
-          </Link>
-        </div>
-
-        <div className={adminStyles.panel}>
-          <h2 className={adminStyles.panelTitle}>Alertas</h2>
-          <div className={adminStyles.alertList}>
-            {alerts.map((alert) => (
-              <article key={alert.id} className={adminStyles.alertItem}>
-                <h3 className={adminStyles.alertTitle}>{alert.title}</h3>
-                <p className={adminStyles.alertDetail}>{alert.detail}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-
-        <div className={adminStyles.panel}>
-          <h2 className={adminStyles.panelTitle}>Aprovações pendentes</h2>
-          <div className={adminStyles.approvalList}>
-            {approvals.map((item) => (
-              <article key={item.id} className={adminStyles.approvalItem}>
-                <h3 className={adminStyles.approvalTitle}>
-                  <Link href={item.href} className={sharedStyles.linkBtn}>
-                    {item.title}
-                  </Link>
-                  <span className={adminStyles.approvalCount}>{item.count}</span>
-                </h3>
-                <p className={adminStyles.approvalDesc}>{item.description}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-
-        <div className={adminStyles.panel}>
-          <h2 className={adminStyles.panelTitle}>Top produtos</h2>
-          <div className={adminStyles.financeList}>
-            {topProducts.map((product) => (
-              <div key={product.id} className={adminStyles.financeRow}>
-                <span className={adminStyles.financeLabel}>
-                  {product.title} · {product.qty} un.
-                </span>
-                <span className={adminStyles.financeValue}>
-                  {formatMoney(product.revenue)}
-                </span>
-              </div>
-            ))}
-          </div>
+          {pendingSellers.length === 0 ? (
+            <AdminEmptyState title="Nenhuma aprovação pendente" />
+          ) : (
+            <div className={adminStyles.approvalList}>
+              {pendingSellers.slice(0, 6).map((seller) => (
+                <article key={seller.id} className={adminStyles.approvalItem}>
+                  <h3 className={adminStyles.approvalTitle}>
+                    <Link href="/admin/vendedores" className={sharedStyles.linkBtn}>
+                      {seller.tradeName}
+                    </Link>
+                  </h3>
+                  <p className={adminStyles.approvalDesc}>
+                    {seller.email} · cadastrado em {formatDate(seller.createdAt)}
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>
