@@ -76,7 +76,7 @@ export default function AccountAddressesPage() {
   return (
     <AccountChrome
       title="Endereços"
-      lead="CRUD local com endereço padrão obrigatório."
+      lead="Gerencie seus endereços de entrega (salvos localmente nesta demonstração)."
       breadcrumbCurrent="Endereços"
     >
       {!isHydrated || !db ? (
