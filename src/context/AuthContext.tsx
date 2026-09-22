@@ -37,7 +37,16 @@ function loginErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return "E-mail ou senha inválidos.";
     if (error.status === 400) return "Verifique o e-mail e a senha informados.";
-    if (error.status > 0) return error.message;
+    // Antes disso, um status <= 0 (rede indisponível OU o diagnóstico
+    // específico de "login funcionou mas a sessão não carregou", lançado
+    // por login() em lib/api/auth.ts) caía nesta função sem cair em
+    // nenhum dos dois casos acima, então a mensagem genérica de baixo era
+    // usada mesmo quando ApiError já trazia um texto mais específico e
+    // útil (ex.: apontando um problema de cookie/CORS em vez de "sem
+    // conexão", ou simplesmente reportando um retry que falhou de novo).
+    // error.message sempre existe e é apropriado pra mostrar ao usuário
+    // nesses casos — não precisa mais filtrar por status.
+    return error.message;
   }
   return "Não foi possível conectar ao servidor. Tente novamente.";
 }
@@ -46,7 +55,11 @@ function registerErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 409) return "Este e-mail já está cadastrado.";
     if (error.status === 400) return "Verifique os dados informados.";
-    if (error.status > 0) return error.message;
+    // Mesmo raciocínio de loginErrorMessage logo acima: sempre usar
+    // error.message em vez de filtrar por status > 0 — client.ts já
+    // atribui o texto certo ("Não foi possível conectar ao servidor...")
+    // pra falha de rede real, então não há nada a ganhar filtrando aqui.
+    return error.message;
   }
   return "Não foi possível conectar ao servidor. Tente novamente.";
 }
