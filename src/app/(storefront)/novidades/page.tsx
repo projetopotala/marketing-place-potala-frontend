@@ -30,6 +30,7 @@ export default async function NovidadesPage({
       title="Novidades"
       description="Seleção editorial demonstrativa marcada com isNew — não usa datas de lançamento inventadas."
       products={products}
+      categories={[]}
       breadcrumb={[
         { label: "Início", href: "/" },
         { label: "Novidades" },

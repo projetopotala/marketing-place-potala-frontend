@@ -43,6 +43,7 @@ export default async function OfertasPage({
       title="Ofertas"
       description={`Produtos em oferta no catálogo público demonstrativo. ${offerSummary}`}
       products={products}
+      categories={[]}
       breadcrumb={[
         { label: "Início", href: "/" },
         { label: "Ofertas" },
