@@ -13,9 +13,19 @@ import { formatPrice } from "@/data/marketplace";
 
 const PAGE_SIZE = 10;
 
+/**
+ * GET /orders (lista) inclui `sellerOrders` mas SEM `items` (orders.
+ * service.ts, `listForCustomer`: `include: { sellerOrders: true }`, sem
+ * `items: true` -- diferente de GET /orders/:id, que inclui tudo). Bug
+ * real encontrado nesta sessão: essa funcao assumia `items` sempre
+ * presente e quebrava a pagina inteira (`Cannot read properties of
+ * undefined (reading 'length')`) toda vez que alguem abria Meus
+ * Pedidos. Guarda contra `items` ausente em vez de presumir o shape do
+ * detalhe.
+ */
 function itemCount(order: OrderResponse): number {
   return order.sellerOrders.reduce(
-    (total, sellerOrder) => total + sellerOrder.items.length,
+    (total, sellerOrder) => total + (sellerOrder.items?.length ?? 0),
     0,
   );
 }
