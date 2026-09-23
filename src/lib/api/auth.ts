@@ -35,6 +35,44 @@ interface SellerOnboardingStatus {
   canOperate: boolean;
 }
 
+/**
+ * sellers-service roda em instância free tier (Render), que dorme após
+ * inatividade — a primeira chamada depois de um período ocioso pode falhar
+ * ou demorar bem mais que o normal (cold start). Sem retry, isso degradava
+ * silenciosamente a sessão do vendedor (ver comentário em `buildSession`
+ * abaixo). Custo no caso comum (serviço já acordado): zero — a primeira
+ * tentativa responde normal e o loop abaixo nunca chega a esperar.
+ *
+ * Só vale re-tentar erro de rede/infra (status 0 ou 5xx) — um 404
+ * (usuário SELLER sem `SellerMembership` ainda, edge case já documentado
+ * abaixo) é uma resposta válida e imediata, repetir só atrasaria o login
+ * à toa.
+ */
+const ONBOARDING_STATUS_RETRY_DELAYS_MS = [1500, 3000, 6000];
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableOnboardingError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false;
+  return error.status === 0 || error.status >= 500;
+}
+
+async function fetchOnboardingStatusWithRetry(): Promise<SellerOnboardingStatus | null> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await apiFetch<SellerOnboardingStatus>("/seller/onboarding/status");
+    } catch (error) {
+      const isLastAttempt = attempt >= ONBOARDING_STATUS_RETRY_DELAYS_MS.length;
+      if (isLastAttempt || !isRetryableOnboardingError(error)) {
+        throw error;
+      }
+      await delay(ONBOARDING_STATUS_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+}
+
 /** A user only ever holds one role in this system today (each registration flow assigns exactly one), but the field is an array — ADMIN/SELLER take precedence over CUSTOMER only as defensive ordering, not because multi-role users are expected. */
 function toUserRole(roles: BackendRole[]): UserRole {
   if (roles.includes("ADMIN")) return "admin";
@@ -68,19 +106,18 @@ async function buildSession(
   }
 
   try {
-    const status = await apiFetch<SellerOnboardingStatus>(
-      "/seller/onboarding/status",
-    );
+    const status = await fetchOnboardingStatusWithRetry();
     return {
       ...session,
       sellerId: status?.sellerId,
       sellerCanOperate: status?.canOperate,
     };
   } catch {
-    // sellers-service unreachable, or (edge case) a SELLER-role user with no
-    // membership row yet — SellerAuthGuard already redirects a session with
-    // no sellerId away from the seller panel, so degrading to a sellerId-less
-    // session here is safe rather than failing the whole login.
+    // sellers-service ainda fora do ar depois das retentativas acima, ou
+    // (edge case) um usuário SELLER sem membership row ainda —
+    // SellerAuthGuard já redireciona uma sessão sem sellerId pra longe do
+    // painel de vendedor, então degradar pra uma sessão sem sellerId aqui é
+    // seguro em vez de falhar o login inteiro.
     return session;
   }
 }
