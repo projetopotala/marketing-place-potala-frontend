@@ -10,6 +10,7 @@ import {
   listPublicProducts,
   toStorefrontProduct,
 } from "@/lib/api/catalog-public";
+import { getProductRatingSummary, listProductReviews } from "@/lib/api/reviews";
 import styles from "./page.module.css";
 
 /**
@@ -51,7 +52,18 @@ export default async function ProductPage({
     notFound();
   }
 
-  const product = toStorefrontProduct(apiProduct);
+  // Fase B do roadmap "estilo Mercado Livre" — avaliação vem de
+  // orders-service, serviço diferente de catalog-service (que resolveu
+  // `apiProduct` acima); buscado em paralelo, não em série, mesmo
+  // raciocínio de performance do resto desta função (ver `relatedPage`
+  // abaixo). Ambas já degradam pra "sem avaliações" sozinhas em caso de
+  // falha (ver lib/api/reviews.ts) — nada de try/catch extra aqui.
+  const [ratingSummary, reviewsPage] = await Promise.all([
+    getProductRatingSummary(apiProduct.id),
+    listProductReviews(apiProduct.id, { limit: 20 }),
+  ]);
+
+  const product = toStorefrontProduct(apiProduct, ratingSummary, reviewsPage.items);
   const images = product.images ?? [];
 
   const relatedPage = await listPublicProducts({
@@ -61,7 +73,7 @@ export default async function ProductPage({
   const related = relatedPage.items
     .filter((p) => p.id !== apiProduct.id)
     .slice(0, 4)
-    .map(toStorefrontProduct);
+    .map((item) => toStorefrontProduct(item));
 
   return (
     <div className={styles.page}>

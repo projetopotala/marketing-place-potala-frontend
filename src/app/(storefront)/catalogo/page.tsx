@@ -50,7 +50,7 @@ export default async function CatalogoPage({
     ? categories.find((category) => category.id === rawCategoryParam)
     : undefined;
 
-  let products = page.items.map(toStorefrontProduct);
+  let products = page.items.map((item) => toStorefrontProduct(item));
   if (selectedCategory) {
     products = products.filter((p) => p.categoryId === selectedCategory.id);
   }

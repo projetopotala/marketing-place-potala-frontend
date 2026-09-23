@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AccountChrome } from "@/components/account/AccountChrome";
+import { OrderItemReviewForm } from "@/components/account/OrderItemReviewForm";
 import {
   getMyOrder,
   ORDER_STATUS_LABEL,
   PAYMENT_TRANSACTION_STATUS_LABEL,
   type OrderResponse,
 } from "@/lib/api/orders";
+import type { ReviewResponse } from "@/lib/api/reviews";
 import { ApiError } from "@/lib/api/client";
 import { formatPrice } from "@/data/marketplace";
 
@@ -22,6 +24,13 @@ import { formatPrice } from "@/data/marketplace";
  * item.slug/imageSrc não existem em OrderItemResponse (o servidor nunca
  * devolveu isso, ver docs/internal-api-contract.md), então os itens aqui
  * não linkam pro produto como a tela mock antiga fazia.
+ *
+ * Itens agora são renderizados por SellerOrder, não mais achatados num
+ * array só (`sellerOrders.flatMap`) — Fase B do roadmap "estilo Mercado
+ * Livre" precisa do `status` de cada SellerOrder pra decidir se mostra o
+ * formulário de avaliação (só libera com CONFIRMED, ver
+ * roadmap-mercado-livre.md seção 6/8), e isso só existe no nível do
+ * SellerOrder, não no item.
  */
 export default function AccountOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -52,8 +61,23 @@ export default function AccountOrderDetailPage() {
     };
   }, [params.id]);
 
-  const items = order?.sellerOrders.flatMap((sellerOrder) => sellerOrder.items) ?? [];
   const latestPayment = order?.paymentTransactions[order.paymentTransactions.length - 1];
+
+  /** Atualiza só o item avaliado no estado local — evita recarregar o pedido inteiro pra refletir uma avaliação nova. */
+  function handleReviewSubmitted(itemId: string, review: ReviewResponse) {
+    setOrder((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        sellerOrders: current.sellerOrders.map((sellerOrder) => ({
+          ...sellerOrder,
+          items: sellerOrder.items.map((item) =>
+            item.id === itemId ? { ...item, review } : item,
+          ),
+        })),
+      };
+    });
+  }
 
   return (
     <AccountChrome
@@ -76,14 +100,35 @@ export default function AccountOrderDetailPage() {
 
           <section>
             <h2>Itens</h2>
-            <ul>
-              {items.map((item) => (
-                <li key={item.id}>
-                  {item.productTitle} ({item.sku}) — {item.quantity}×{" "}
-                  {formatPrice(item.unitPriceCents / 100)}
-                </li>
-              ))}
-            </ul>
+            {order.sellerOrders.map((sellerOrder) => (
+              <ul key={sellerOrder.id} style={{ marginBottom: 16 }}>
+                {sellerOrder.items.map((item) => (
+                  <li key={item.id} style={{ marginBottom: 12 }}>
+                    {item.productTitle} ({item.sku}) — {item.quantity}×{" "}
+                    {formatPrice(item.unitPriceCents / 100)}
+                    {sellerOrder.status === "CONFIRMED" ? (
+                      item.review ? (
+                        <p
+                          style={{
+                            margin: "4px 0 0",
+                            color: "var(--potala-muted, #6b6b6b)",
+                          }}
+                        >
+                          Sua avaliação: {item.review.rating}/5
+                          {item.review.comment ? ` — "${item.review.comment}"` : ""}
+                        </p>
+                      ) : (
+                        <OrderItemReviewForm
+                          orderId={order.id}
+                          itemId={item.id}
+                          onSubmitted={(review) => handleReviewSubmitted(item.id, review)}
+                        />
+                      )
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ))}
           </section>
 
           <section>

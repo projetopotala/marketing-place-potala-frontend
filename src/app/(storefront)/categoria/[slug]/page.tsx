@@ -55,7 +55,7 @@ export default async function CategoriaPage({
     q: query || undefined,
     limit: 60,
   });
-  const products = sortProducts(page.items.map(toStorefrontProduct), order);
+  const products = sortProducts(page.items.map((item) => toStorefrontProduct(item)), order);
 
   return (
     <CatalogListing

@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import type { ReviewResponse } from "./reviews";
 
 /**
  * New this session — Fase 2 do plano até 05/10 (checkout real, ver
@@ -96,6 +97,15 @@ export interface OrderItemResponse {
   quantity: number;
   unitPriceCents: number;
   lineTotalCents: number;
+  /**
+   * Fase B do roadmap "estilo Mercado Livre" — presente só em GET
+   * /orders/:id (orders.service.ts's getForCustomer inclui `items: {
+   * include: { review: true } }`). GET /orders (lista) nem sequer inclui
+   * `items` — ver o comentário de itemCount() em
+   * minha-conta/pedidos/page.tsx — então este campo só existe na tela de
+   * detalhe. `null`/ausente = item ainda não avaliado.
+   */
+  review?: ReviewResponse | null;
 }
 
 export interface SellerOrderResponse {

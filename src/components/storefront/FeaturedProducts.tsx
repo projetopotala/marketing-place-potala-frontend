@@ -13,7 +13,7 @@ import { listPublicProducts, toStorefrontProduct } from "@/lib/api/catalog-publi
  */
 export async function FeaturedProducts() {
   const page = await listPublicProducts({ limit: 8 });
-  const products = page.items.map(toStorefrontProduct);
+  const products = page.items.map((item) => toStorefrontProduct(item));
 
   if (products.length === 0) {
     return null;

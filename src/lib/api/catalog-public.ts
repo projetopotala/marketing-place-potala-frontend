@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
-import type { Product, ProductImage as StorefrontProductImage } from "@/types/marketplace";
+import type { Product, ProductImage as StorefrontProductImage, ProductReviewItem } from "@/types/marketplace";
+import type { RatingSummaryResponse, ReviewResponse } from "./reviews";
 
 /**
  * New this session — Fase 1 do plano até 05/10 (vitrine pública real,
@@ -170,11 +171,34 @@ function toStorefrontImages(product: PublicProduct): StorefrontProductImage[] {
 }
 
 /**
+ * Fase B do roadmap "estilo Mercado Livre" — avaliação vem de
+ * orders-service (`/public/reviews`, ver lib/api/reviews.ts), não de
+ * catalog-service: não há como resolver o nome de quem comprou (só
+ * `customerId`, sem endpoint público de identidade, decisão de escopo já
+ * registrada no roadmap), então todo item aqui usa um rótulo genérico.
+ */
+function toReviewItems(reviews: ReviewResponse[]): ProductReviewItem[] {
+  return reviews.map((review) => ({
+    id: review.id,
+    author: "Cliente verificado",
+    rating: review.rating,
+    date: new Date(review.createdAt).toLocaleDateString("pt-BR"),
+    comment: review.comment ?? "",
+  }));
+}
+
+/**
  * Maps a real catalog-service product onto the storefront's existing
  * `Product` type (types/marketplace.ts) so every already-built
  * presentational component (ProductCard, ProductGallery,
  * ProductInformation, ProductPurchasePanel, ProductReviews,
  * RelatedProducts, …) keeps working completely untouched.
+ *
+ * `ratingSummary`/`reviews` are optional and come from orders-service
+ * (Fase B), a different service than `product` — the caller fetches both
+ * in parallel and passes them in here, this function just merges them.
+ * Omitting them (existing callers that haven't been updated) falls back
+ * to the same "no reviews" defaults as before.
  *
  * Deliberate simplifications, because these concepts simply do not exist
  * in the real backend yet (nothing here is faked as if it were real data —
@@ -187,9 +211,6 @@ function toStorefrontImages(product: PublicProduct): StorefrontProductImage[] {
  *   consumer of `Product.slug` in this codebase only ever uses it to build
  *   a URL (`/produto/${product.slug}`), never displays it, so this is
  *   invisible to the shopper.
- * - `rating`/`reviewCount` are always 0 — there is no review model
- *   anywhere in the backend. ProductCard/ProductInformation already
- *   render "Sem avaliações" for that case, unchanged.
  * - `stock` is the sum of on-hand quantity across every variant — the
  *   backend has no single "product stock" field either (same convention
  *   already used by `totalStock` in lib/api/catalog.ts for the seller
@@ -201,7 +222,11 @@ function toStorefrontImages(product: PublicProduct): StorefrontProductImage[] {
  *   — none of these exist on Product in catalog-service. Every consumer
  *   already treats them as optional and renders nothing when absent.
  */
-export function toStorefrontProduct(product: PublicProduct): Product {
+export function toStorefrontProduct(
+  product: PublicProduct,
+  ratingSummary?: RatingSummaryResponse,
+  reviews?: ReviewResponse[],
+): Product {
   return {
     id: product.id,
     slug: product.id,
@@ -209,8 +234,8 @@ export function toStorefrontProduct(product: PublicProduct): Product {
     category: product.category.name,
     categoryId: product.category.id,
     price: product.priceCents / 100,
-    rating: 0,
-    reviewCount: 0,
+    rating: ratingSummary?.average ?? 0,
+    reviewCount: ratingSummary?.count ?? 0,
     imageSrc: toStorefrontImages(product)[0]?.src ?? FALLBACK_IMAGE_SRC,
     imageAlt: product.images[0]?.alt ?? product.title,
     action: "cart",
@@ -220,5 +245,6 @@ export function toStorefrontProduct(product: PublicProduct): Product {
     sku: product.variants[0]?.sku,
     images: toStorefrontImages(product),
     defaultVariantId: product.variants[0]?.id,
+    reviews: reviews ? toReviewItems(reviews) : undefined,
   };
 }
