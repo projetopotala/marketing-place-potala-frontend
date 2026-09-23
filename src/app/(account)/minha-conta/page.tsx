@@ -148,9 +148,18 @@ export default function MinhaContaPage() {
       lead="Acompanhe suas atividades, pedidos e preferências em um só lugar."
       breadcrumbCurrent="Resumo da Conta"
     >
-      {!isHydrated || !db ? (
+      {!isHydrated ? (
         <p role="status">Carregando dados da conta…</p>
       ) : (
+        // Bug real encontrado nesta sessao: essa condicao exigia
+        // `isHydrated && db`, mas AccountDataContext SEMPRE deixa `db`
+        // null pra qualquer usuario que nao seja role === "customer"
+        // (vendedor, admin) -- por design, nao por falha de carregamento.
+        // Resultado: um vendedor/admin que caisse em /minha-conta ficava
+        // preso pra sempre em "Carregando dados da conta...", porque
+        // `db` nunca deixava de ser null. `favorites`/`pendingReviews`
+        // logo abaixo ja tratam `db` nulo com `db?.` (viram lista vazia/
+        // 0), entao bastava nao gatear a tela inteira por `db`.
         <>
           <AccountWelcomePanel
             name={name}
