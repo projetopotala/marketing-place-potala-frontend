@@ -36,41 +36,54 @@ interface SellerOnboardingStatus {
 }
 
 /**
- * sellers-service roda em instância free tier (Render), que dorme após
- * inatividade — a primeira chamada depois de um período ocioso pode falhar
- * ou demorar bem mais que o normal (cold start). Sem retry, isso degradava
- * silenciosamente a sessão do vendedor (ver comentário em `buildSession`
- * abaixo). Custo no caso comum (serviço já acordado): zero — a primeira
- * tentativa responde normal e o loop abaixo nunca chega a esperar.
+ * Vários serviços deste backend rodam em instância free tier (Render), que
+ * dorme após inatividade — a primeira chamada depois de um período ocioso
+ * pode falhar ou demorar bem mais que o normal (cold start). Usado hoje por
+ * dois pontos: o onboarding-status do vendedor logo abaixo (já existia) e
+ * `login()` mais abaixo (novo — status-migracao-microservicos.md, item 8,
+ * "Pendente": era o único dos dois sem proteção nenhuma — uma tentativa de
+ * login com identity-service dormindo falhava direto com
+ * "Ocorreu um erro inesperado.", sem chance de recuperar sozinho, o pior
+ * cenário possível de cold start: ninguém consegue nem entrar no sistema).
+ * Custo no caso comum (serviço já acordado): zero — a primeira tentativa
+ * responde normal e o loop abaixo nunca chega a esperar.
  *
- * Só vale re-tentar erro de rede/infra (status 0 ou 5xx) — um 404
- * (usuário SELLER sem `SellerMembership` ainda, edge case já documentado
- * abaixo) é uma resposta válida e imediata, repetir só atrasaria o login
- * à toa.
+ * Só vale re-tentar erro de rede/infra (status 0 ou 5xx) — um 401 (senha
+ * errada) ou um 404 (usuário SELLER sem `SellerMembership` ainda, edge case
+ * já documentado abaixo) são respostas válidas e imediatas; repetir essas
+ * só atrasaria à toa (e, no caso do login, mostraria a mensagem de erro
+ * bem mais tarde do que devia).
  */
-const ONBOARDING_STATUS_RETRY_DELAYS_MS = [1500, 3000, 6000];
+const COLD_START_RETRY_DELAYS_MS = [1500, 3000, 6000];
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isRetryableOnboardingError(error: unknown): boolean {
+function isRetryableInfraError(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false;
   return error.status === 0 || error.status >= 500;
 }
 
-async function fetchOnboardingStatusWithRetry(): Promise<SellerOnboardingStatus | null> {
+/** Reexecuta `request` com backoff enquanto o erro for de rede/infra (ver isRetryableInfraError) — usado tanto pro onboarding-status quanto pro login, ambos sujeitos ao mesmo cold start de serviço no plano free do Render. */
+async function retryOnColdStart<T>(request: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await apiFetch<SellerOnboardingStatus>("/seller/onboarding/status");
+      return await request();
     } catch (error) {
-      const isLastAttempt = attempt >= ONBOARDING_STATUS_RETRY_DELAYS_MS.length;
-      if (isLastAttempt || !isRetryableOnboardingError(error)) {
+      const isLastAttempt = attempt >= COLD_START_RETRY_DELAYS_MS.length;
+      if (isLastAttempt || !isRetryableInfraError(error)) {
         throw error;
       }
-      await delay(ONBOARDING_STATUS_RETRY_DELAYS_MS[attempt]);
+      await delay(COLD_START_RETRY_DELAYS_MS[attempt]);
     }
   }
+}
+
+async function fetchOnboardingStatusWithRetry(): Promise<SellerOnboardingStatus | null> {
+  return retryOnColdStart(() =>
+    apiFetch<SellerOnboardingStatus>("/seller/onboarding/status"),
+  );
 }
 
 /** A user only ever holds one role in this system today (each registration flow assigns exactly one), but the field is an array — ADMIN/SELLER take precedence over CUSTOMER only as defensive ordering, not because multi-role users are expected. */
@@ -178,11 +191,15 @@ export async function login(input: {
   // also resolves display name and, for a seller, sellerId), reusing the
   // exact same code path page-load hydration uses — a wrong-credentials
   // attempt throws ApiError(401) straight out of this first call, before
-  // getSession() is ever reached.
-  await apiFetch<LoginResponse>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  // getSession() is ever reached (retryOnColdStart above does not retry a
+  // 401 -- only status 0 / 5xx, so a genuinely wrong password still fails
+  // immediately, same as before).
+  await retryOnColdStart(() =>
+    apiFetch<LoginResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  );
 
   const session = await getSession();
   if (!session) {
