@@ -1,255 +1,206 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useAdminData } from "@/features/admin/hooks/useAdminData";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ORDER_STATUS_LABEL,
-  PAYMENT_STATUS_LABEL,
-  canTransitionOrder,
-} from "@/features/admin/domain/status";
-import type { AdminOrder, OrderStatus } from "@/features/admin/domain/types";
-import { formatMoney } from "@/features/admin/utils/currency";
-import { downloadCsv, toCsv } from "@/features/admin/utils/csv";
-import { includesQuery, paginate, sortBy } from "@/features/admin/utils/filters";
-import { formatDate } from "@/features/admin/utils/dates";
+  listAdminOrders,
+  listAdminSellers,
+  type AdminSeller,
+  type AdminSellerOrder,
+} from "@/lib/api/admin";
+import { ApiError } from "@/lib/api/client";
+import { SELLER_ORDER_STATUS_LABEL, type SellerOrderStatus } from "@/lib/api/orders";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
-import {
-  AdminMetricCard,
-  AdminMetricsRow,
-} from "@/components/admin/shared/AdminMetricCard";
-import {
-  AdminDataTable,
-  sharedStyles,
-} from "@/components/admin/shared/AdminDataTable";
-import {
-  AdminFilterBar,
-  AdminPagination,
-  AdminStatusBadge,
-  Field,
-} from "@/components/admin/shared/AdminStatusBadge";
-import { useAdminToast } from "@/components/admin/shared/AdminToastProvider";
+import { AdminDataTable, sharedStyles } from "@/components/admin/shared/AdminDataTable";
+import { AdminStatusBadge, AdminEmptyState } from "@/components/admin/shared/AdminStatusBadge";
 
-function orderTone(status: OrderStatus) {
-  if (status === "delivered" || status === "paid") return "success" as const;
-  if (status === "pending_payment" || status === "processing") return "warning" as const;
-  if (status === "cancelled" || status === "refunded") return "danger" as const;
+/**
+ * Real via GET /admin/orders (orders-service) — mesmo endpoint novo criado
+ * pro Financeiro admin (ver status-migracao-microservicos.md). Substitui o
+ * mock antigo (`useAdminData`, `db.orders`, com busca, filtro por status,
+ * exportação CSV e transições "Marcar pago"/"Separar"/"Enviar").
+ *
+ * Removido de propósito, mesmo raciocínio já usado em SellersView.tsx:
+ * - Sem busca nem filtro por status server-side: o backend só pagina por
+ *   cursor (PaginationQueryDto: limit/cursor). Filtrar só a página
+ *   carregada pareceria filtrar tudo e não filtraria de verdade.
+ * - Sem exportar CSV: só exportaria a página atual (até 10 linhas), não
+ *   os pedidos todos — enganoso chamar isso de "exportar".
+ * - Sem ações de mudar status ("Marcar pago"/"Separar"/"Enviar"): não
+ *   existe PATCH admin de pedido em nenhum backend real desta v1 —
+ *   AdminOrdersController só tem GET.
+ * - Sem link pra tela de detalhe: não existe GET /admin/orders/:id (mesma
+ *   decisão de escopo já tomada em SellersView, que também não linka pra
+ *   detalhe por não existir GET /admin/sellers/:id).
+ *
+ * Mostra `SellerOrder.status` (rastreio/fulfillment: pendente, confirmado,
+ * em preparação, enviado, entregue...), não `Order.status` (pagamento) —
+ * esse é o Financeiro (FinanceView.tsx), este é Pedidos: mesma distinção
+ * já documentada em SellerFinanceView.tsx vs. a tela /loja/pedidos do
+ * vendedor.
+ */
+
+const PAGE_SIZE = 10;
+const SELLERS_LIMIT = 100;
+
+function orderTone(status: SellerOrderStatus) {
+  if (status === "DELIVERED" || status === "SHIPPED") return "success" as const;
+  if (status === "PENDING") return "warning" as const;
+  if (status === "CANCELLED") return "danger" as const;
   return "info" as const;
 }
 
+function formatMoney(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
 export function OrdersView() {
-  const { db, isHydrated, repo, refresh } = useAdminData();
-  const toast = useAdminToast();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<OrderStatus | "all">("all");
-  const [page, setPage] = useState(1);
+  const [sellers, setSellers] = useState<AdminSeller[] | null>(null);
+  const [orders, setOrders] = useState<AdminSellerOrder[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
 
-  const customerName = useMemo(() => {
-    const map = new Map(db.customers.map((c) => [c.id, c.name]));
-    return (id: string) => map.get(id) ?? id;
-  }, [db.customers]);
+  useEffect(() => {
+    let cancelled = false;
+    listAdminSellers({ limit: SELLERS_LIMIT })
+      .then((page) => {
+        if (!cancelled) setSellers(page.items);
+      })
+      .catch(() => {
+        // Nome da loja é só um complemento visual — se essa chamada falhar,
+        // a tabela ainda funciona mostrando o sellerId cru no lugar do nome.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const filtered = useMemo(() => {
-    const list = db.orders.filter((order) => {
-      if (status !== "all" && order.status !== status) return false;
-      return includesQuery(
-        `${order.code} ${customerName(order.customerId)} ${order.city}`,
-        query,
-      );
-    });
-    return sortBy(list, (o) => o.createdAt, "desc");
-  }, [db.orders, query, status, customerName]);
-
-  const paged = paginate(filtered, page, 8);
-
-  const metrics = useMemo(() => {
-    const open = db.orders.filter(
-      (o) => !["cancelled", "refunded", "delivered"].includes(o.status),
-    ).length;
-    const pendingPay = db.orders.filter((o) => o.status === "pending_payment").length;
-    const revenue = db.orders
-      .filter((o) => !["cancelled", "refunded"].includes(o.status))
-      .reduce((sum, o) => sum + o.totalCents, 0);
-    return { total: db.orders.length, open, pendingPay, revenue };
-  }, [db.orders]);
-
-  function transition(order: AdminOrder, next: OrderStatus) {
-    if (!canTransitionOrder(order.status, next)) {
-      toast.push("Transição não permitida", "error");
-      return;
-    }
+  const loadPage = useCallback(async (cursor: string | null) => {
+    setIsLoading(true);
+    setError(null);
     try {
-      refresh(repo.updateOrderStatus(order.id, next));
-      toast.push(`Pedido → ${ORDER_STATUS_LABEL[next]}`);
-    } catch {
-      toast.push("Falha na transição", "error");
+      const page = await listAdminOrders({ limit: PAGE_SIZE, cursor });
+      setOrders(page.items);
+      setHasNextPage(page.pageInfo.hasNextPage);
+    } catch (err) {
+      setOrders(null);
+      setError(
+        err instanceof ApiError ? err.message : "Não foi possível carregar os pedidos.",
+      );
+    } finally {
+      setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    void loadPage(cursorStack[pageIndex] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIndex, loadPage]);
+
+  function goNext() {
+    if (!hasNextPage || !orders || orders.length === 0) return;
+    const nextCursor = orders[orders.length - 1]?.id ?? null;
+    setCursorStack((stack) => {
+      const next = stack.slice(0, pageIndex + 1);
+      next.push(nextCursor);
+      return next;
+    });
+    setPageIndex((index) => index + 1);
   }
 
-  function exportCsv() {
-    downloadCsv(
-      "pedidos.csv",
-      toCsv(
-        ["Código", "Cliente", "Status", "Pagamento", "Total", "Data"],
-        filtered.map((o) => [
-          o.code,
-          customerName(o.customerId),
-          ORDER_STATUS_LABEL[o.status],
-          PAYMENT_STATUS_LABEL[o.paymentStatus],
-          formatMoney(o.totalCents),
-          formatDate(o.createdAt),
-        ]),
-      ),
-    );
-    toast.push("CSV exportado");
+  function goPrevious() {
+    if (pageIndex === 0) return;
+    setPageIndex((index) => index - 1);
   }
 
-  if (!isHydrated) {
-    return <div className={sharedStyles.skeleton} aria-busy="true" />;
-  }
+  const sellerName = useMemo(() => {
+    const map = new Map((sellers ?? []).map((s) => [s.id, s.tradeName]));
+    return (id: string) => map.get(id) ?? id;
+  }, [sellers]);
 
   return (
     <div className={sharedStyles.stack}>
       <AdminPageHeader
         title="Pedidos"
-        description="Acompanhe e avance status apenas pelas transições permitidas."
-        actions={
-          <button type="button" className={sharedStyles.btnSecondary} onClick={exportCsv}>
-            Exportar CSV
-          </button>
-        }
+        description="Pedidos de todas as lojas, direto do orders-service."
       />
 
-      <AdminMetricsRow>
-        <AdminMetricCard label="Total" value={String(metrics.total)} />
-        <AdminMetricCard label="Em aberto" value={String(metrics.open)} />
-        <AdminMetricCard label="Aguardando pag." value={String(metrics.pendingPay)} />
-        <AdminMetricCard label="Receita" value={formatMoney(metrics.revenue)} />
-      </AdminMetricsRow>
-
-      <AdminFilterBar>
-        <Field label="Buscar">
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
-          />
-        </Field>
-        <Field label="Status">
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value as OrderStatus | "all");
-              setPage(1);
-            }}
-          >
-            <option value="all">Todos</option>
-            {(Object.keys(ORDER_STATUS_LABEL) as OrderStatus[]).map((key) => (
-              <option key={key} value={key}>
-                {ORDER_STATUS_LABEL[key]}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </AdminFilterBar>
-
-      <AdminDataTable
-        caption="Pedidos"
-        rows={paged.items}
-        columns={[
-          {
-            key: "code",
-            header: "Pedido",
-            render: (row) => (
-              <Link href={`/admin/pedidos/${row.id}`} className={sharedStyles.linkBtn}>
-                {row.code}
-              </Link>
-            ),
-          },
-          {
-            key: "customer",
-            header: "Cliente",
-            render: (row) => customerName(row.customerId),
-          },
-          {
-            key: "status",
-            header: "Status",
-            render: (row) => (
+      {isLoading ? (
+        <p role="status">Carregando pedidos…</p>
+      ) : error ? (
+        <AdminEmptyState title="Não foi possível carregar os pedidos" description={error} />
+      ) : (
+        <AdminDataTable
+          caption="Pedidos de todas as lojas"
+          rows={orders ?? []}
+          columns={[
+            { key: "code", header: "Pedido", render: (row) => row.order.orderNumber },
+            { key: "seller", header: "Loja", render: (row) => sellerName(row.sellerId) },
+            {
+              key: "status",
+              header: "Status",
+              render: (row) => (
+                <AdminStatusBadge
+                  label={SELLER_ORDER_STATUS_LABEL[row.status]}
+                  tone={orderTone(row.status)}
+                />
+              ),
+            },
+            { key: "total", header: "Total", render: (row) => formatMoney(row.subtotalCents) },
+            { key: "date", header: "Data", render: (row) => formatDate(row.createdAt) },
+            {
+              key: "city",
+              header: "Cidade",
+              render: (row) =>
+                row.order.shippingAddress
+                  ? `${row.order.shippingAddress.city}/${row.order.shippingAddress.state}`
+                  : "—",
+            },
+          ]}
+          mobileCard={(row) => (
+            <>
+              <strong>{row.order.orderNumber}</strong>
+              <span>{sellerName(row.sellerId)}</span>
               <AdminStatusBadge
-                label={ORDER_STATUS_LABEL[row.status]}
+                label={SELLER_ORDER_STATUS_LABEL[row.status]}
                 tone={orderTone(row.status)}
               />
-            ),
-          },
-          {
-            key: "payment",
-            header: "Pagamento",
-            render: (row) => PAYMENT_STATUS_LABEL[row.paymentStatus],
-          },
-          {
-            key: "total",
-            header: "Total",
-            render: (row) => formatMoney(row.totalCents),
-          },
-          {
-            key: "actions",
-            header: "Ações",
-            render: (row) => (
-              <div className={sharedStyles.rowActions}>
-                {row.status === "pending_payment" ? (
-                  <button
-                    type="button"
-                    className={sharedStyles.linkBtn}
-                    onClick={() => transition(row, "paid")}
-                  >
-                    Marcar pago
-                  </button>
-                ) : null}
-                {canTransitionOrder(row.status, "processing") ? (
-                  <button
-                    type="button"
-                    className={sharedStyles.linkBtn}
-                    onClick={() => transition(row, "processing")}
-                  >
-                    Separar
-                  </button>
-                ) : null}
-                {canTransitionOrder(row.status, "shipped") ? (
-                  <button
-                    type="button"
-                    className={sharedStyles.linkBtn}
-                    onClick={() => transition(row, "shipped")}
-                  >
-                    Enviar
-                  </button>
-                ) : null}
-              </div>
-            ),
-          },
-        ]}
-        mobileCard={(row) => (
-          <>
-            <Link href={`/admin/pedidos/${row.id}`} className={sharedStyles.linkBtn}>
-              {row.code}
-            </Link>
-            <span>{customerName(row.customerId)}</span>
-            <AdminStatusBadge
-              label={ORDER_STATUS_LABEL[row.status]}
-              tone={orderTone(row.status)}
-            />
-            <span>{formatMoney(row.totalCents)}</span>
-          </>
-        )}
-      />
+              <span>
+                {formatMoney(row.subtotalCents)} · {formatDate(row.createdAt)}
+              </span>
+            </>
+          )}
+        />
+      )}
 
-      <AdminPagination
-        page={paged.page}
-        pages={paged.pages}
-        total={paged.total}
-        onChange={setPage}
-      />
+      <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
+        <button
+          type="button"
+          className={sharedStyles.btnGhost}
+          disabled={pageIndex === 0 || isLoading}
+          onClick={goPrevious}
+        >
+          Anterior
+        </button>
+        <span>Página {pageIndex + 1}</span>
+        <button
+          type="button"
+          className={sharedStyles.btnGhost}
+          disabled={!hasNextPage || isLoading}
+          onClick={goNext}
+        >
+          Próxima
+        </button>
+      </div>
     </div>
   );
 }

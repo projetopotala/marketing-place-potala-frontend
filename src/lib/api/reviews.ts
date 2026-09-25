@@ -110,6 +110,29 @@ export async function getSellerRatingSummary(
   }
 }
 
+/**
+ * GET /seller/reviews — avaliações recebidas pela loja autenticada,
+ * paginado por cursor. Novo esta sessão, backs the seller "Avaliações"
+ * panel. Autenticado (Role.SELLER) — diferente das funções públicas
+ * acima, esta NÃO degrada em silêncio: mesmo padrão de
+ * listMySellerOrders em orders.ts, a tela precisa saber se a chamada
+ * falhou de verdade em vez de mostrar "sem avaliações" quando na
+ * verdade a rede caiu.
+ */
+export async function listMySellerReviews(params?: {
+  limit?: number;
+  cursor?: string | null;
+}): Promise<Paginated<ReviewResponse>> {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.cursor) query.set("cursor", params.cursor);
+  const qs = query.toString();
+  const result = await apiFetch<Paginated<ReviewResponse>>(
+    `/seller/reviews${qs ? `?${qs}` : ""}`,
+  );
+  return result ?? EMPTY_REVIEWS_PAGE;
+}
+
 export interface CreateReviewInput {
   rating: number;
   comment?: string;

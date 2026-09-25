@@ -1,215 +1,230 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useAdminData } from "@/features/admin/hooks/useAdminData";
-import { CUSTOMER_STATUS_LABEL } from "@/features/admin/domain/status";
-import type { Customer, CustomerStatus } from "@/features/admin/domain/types";
-import { downloadCsv, toCsv } from "@/features/admin/utils/csv";
-import { includesQuery, paginate, sortBy } from "@/features/admin/utils/filters";
-import { formatDate } from "@/features/admin/utils/dates";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ADMIN_CUSTOMER_STATUS_LABEL,
+  blockCustomer,
+  listAdminCustomers,
+  unblockCustomer,
+  type AdminCustomer,
+  type AdminCustomerStatus,
+} from "@/lib/api/admin";
+import { ApiError } from "@/lib/api/client";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
-import {
-  AdminMetricCard,
-  AdminMetricsRow,
-} from "@/components/admin/shared/AdminMetricCard";
-import {
-  AdminDataTable,
-  sharedStyles,
-} from "@/components/admin/shared/AdminDataTable";
-import {
-  AdminFilterBar,
-  AdminPagination,
-  AdminStatusBadge,
-  Field,
-} from "@/components/admin/shared/AdminStatusBadge";
+import { AdminDataTable, sharedStyles } from "@/components/admin/shared/AdminDataTable";
+import { AdminStatusBadge } from "@/components/admin/shared/AdminStatusBadge";
 import { AdminConfirmDialog } from "@/components/admin/shared/AdminModal";
 import { useAdminToast } from "@/components/admin/shared/AdminToastProvider";
 
+const PAGE_SIZE = 10;
+
+/**
+ * Real via GET/PATCH /admin/customers (identity-service, novo nesta
+ * sessão — ver status-migracao-microservicos.md). Substitui o mock antigo
+ * (`useAdminData`, `db.customers`, com busca, filtro por status,
+ * exportação CSV, tags/notas/produtos preferidos/cidade e link pra tela de
+ * detalhe — nada disso tem contrapartida real).
+ *
+ * Removido de propósito, mesmo raciocínio já usado em SellersView.tsx:
+ * - Sem busca nem filtro por status: backend só pagina por cursor.
+ * - Sem exportar CSV: só exportaria a página atual, não todos os clientes.
+ * - Sem tags/notas/produtos preferidos/cidade: não existem no backend —
+ *   eram 100% inventados no mock.
+ * - Sem link pra tela de detalhe: não existe GET /admin/customers/:id.
+ *
+ * Bloquear/desbloquear não fica registrado em nenhum lugar (identity-service
+ * não tem model de AuditLog, diferente de sellers-service/catalog-service)
+ * — só o status muda, sem histórico de quem fez o quê.
+ */
+function customerTone(status: AdminCustomerStatus) {
+  if (status === "ACTIVE") return "success" as const;
+  if (status === "BLOCKED") return "danger" as const;
+  return "warning" as const;
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("pt-BR");
+}
+
 export function CustomersView() {
-  const { db, isHydrated, repo, refresh } = useAdminData();
   const toast = useAdminToast();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<CustomerStatus | "all">("all");
-  const [page, setPage] = useState(1);
-  const [blockTarget, setBlockTarget] = useState<Customer | null>(null);
+  const [customers, setCustomers] = useState<AdminCustomer[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [statusTarget, setStatusTarget] = useState<AdminCustomer | null>(null);
 
-  const filtered = useMemo(() => {
-    const list = db.customers.filter((customer) => {
-      if (status !== "all" && customer.status !== status) return false;
-      return includesQuery(
-        `${customer.name} ${customer.email} ${customer.city} ${customer.tags.join(" ")}`,
-        query,
+  const loadPage = useCallback(async (cursor: string | null) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const page = await listAdminCustomers({ limit: PAGE_SIZE, cursor });
+      setCustomers(page.items);
+      setHasNextPage(page.pageInfo.hasNextPage);
+    } catch (err) {
+      setCustomers(null);
+      setError(
+        err instanceof ApiError ? err.message : "Não foi possível carregar os clientes.",
       );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPage(cursorStack[pageIndex] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIndex, loadPage]);
+
+  function goNext() {
+    if (!hasNextPage || !customers || customers.length === 0) return;
+    const nextCursor = customers[customers.length - 1]?.id ?? null;
+    setCursorStack((stack) => {
+      const next = stack.slice(0, pageIndex + 1);
+      next.push(nextCursor);
+      return next;
     });
-    return sortBy(list, (c) => c.name, "asc");
-  }, [db.customers, query, status]);
-
-  const paged = paginate(filtered, page, 8);
-
-  const metrics = useMemo(
-    () => ({
-      total: db.customers.length,
-      active: db.customers.filter((c) => c.status === "active").length,
-      blocked: db.customers.filter((c) => c.status === "blocked").length,
-      tagged: db.customers.filter((c) => c.tags.length > 0).length,
-    }),
-    [db.customers],
-  );
-
-  function exportCsv() {
-    downloadCsv(
-      "clientes.csv",
-      toCsv(
-        ["Nome", "E-mail", "Status", "Cidade", "Tags", "Criado"],
-        filtered.map((c) => [
-          c.name,
-          c.email,
-          CUSTOMER_STATUS_LABEL[c.status],
-          `${c.city}/${c.state}`,
-          c.tags.join("; "),
-          formatDate(c.createdAt),
-        ]),
-      ),
-    );
-    toast.push("CSV exportado");
+    setPageIndex((index) => index + 1);
   }
 
-  if (!isHydrated) {
-    return <div className={sharedStyles.skeleton} aria-busy="true" />;
+  function goPrevious() {
+    if (pageIndex === 0) return;
+    setPageIndex((index) => index - 1);
+  }
+
+  function applyResult(id: string, status: AdminCustomerStatus) {
+    setCustomers((current) =>
+      current ? current.map((c) => (c.id === id ? { ...c, status } : c)) : current,
+    );
+  }
+
+  async function confirmStatusChange() {
+    if (!statusTarget) return;
+    setPendingActionId(statusTarget.id);
+    try {
+      const result =
+        statusTarget.status === "BLOCKED"
+          ? await unblockCustomer(statusTarget.id)
+          : await blockCustomer(statusTarget.id);
+      applyResult(statusTarget.id, result.status);
+      toast.push(
+        result.status === "BLOCKED" ? "Cliente bloqueado" : "Cliente desbloqueado",
+      );
+      setStatusTarget(null);
+    } catch (err) {
+      toast.push(
+        err instanceof ApiError ? err.message : "Não foi possível concluir a ação.",
+        "error",
+      );
+    } finally {
+      setPendingActionId(null);
+    }
   }
 
   return (
     <div className={sharedStyles.stack}>
       <AdminPageHeader
         title="Clientes"
-        description="Bloqueie contas, edite notas e acompanhe tags."
-        actions={
-          <button type="button" className={sharedStyles.btnSecondary} onClick={exportCsv}>
-            Exportar CSV
-          </button>
-        }
+        description="Bloqueie ou desbloqueie contas, direto do identity-service."
       />
 
-      <AdminMetricsRow>
-        <AdminMetricCard label="Total" value={String(metrics.total)} />
-        <AdminMetricCard label="Ativos" value={String(metrics.active)} />
-        <AdminMetricCard label="Bloqueados" value={String(metrics.blocked)} />
-        <AdminMetricCard label="Com tags" value={String(metrics.tagged)} />
-      </AdminMetricsRow>
-
-      <AdminFilterBar>
-        <Field label="Buscar">
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
-          />
-        </Field>
-        <Field label="Status">
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value as CustomerStatus | "all");
-              setPage(1);
-            }}
-          >
-            <option value="all">Todos</option>
-            <option value="active">Ativo</option>
-            <option value="blocked">Bloqueado</option>
-          </select>
-        </Field>
-      </AdminFilterBar>
-
-      <AdminDataTable
-        caption="Clientes"
-        rows={paged.items}
-        columns={[
-          {
-            key: "name",
-            header: "Cliente",
-            render: (row) => (
-              <Link href={`/admin/clientes/${row.id}`} className={sharedStyles.linkBtn}>
-                {row.name}
-              </Link>
-            ),
-          },
-          { key: "email", header: "E-mail", render: (row) => row.email },
-          {
-            key: "status",
-            header: "Status",
-            render: (row) => (
+      {isLoading ? (
+        <p role="status">Carregando clientes…</p>
+      ) : error ? (
+        <p role="alert" style={{ color: "var(--potala-danger, #c95c57)" }}>
+          {error}
+        </p>
+      ) : (
+        <AdminDataTable
+          caption="Lista de clientes"
+          rows={customers ?? []}
+          columns={[
+            {
+              key: "name",
+              header: "Cliente",
+              render: (row) => row.fullName ?? "—",
+            },
+            { key: "email", header: "E-mail", render: (row) => row.email },
+            {
+              key: "phone",
+              header: "Telefone",
+              render: (row) => row.phone ?? "—",
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (row) => (
+                <AdminStatusBadge
+                  label={ADMIN_CUSTOMER_STATUS_LABEL[row.status]}
+                  tone={customerTone(row.status)}
+                />
+              ),
+            },
+            {
+              key: "createdAt",
+              header: "Criado em",
+              render: (row) => formatDate(row.createdAt),
+            },
+            {
+              key: "actions",
+              header: "Ações",
+              render: (row) => (
+                <button
+                  type="button"
+                  className={sharedStyles.linkBtn}
+                  disabled={pendingActionId === row.id}
+                  onClick={() => setStatusTarget(row)}
+                >
+                  {row.status === "BLOCKED" ? "Desbloquear" : "Bloquear"}
+                </button>
+              ),
+            },
+          ]}
+          mobileCard={(row) => (
+            <>
+              <strong>{row.fullName ?? row.email}</strong>
+              <span>{row.email}</span>
               <AdminStatusBadge
-                label={CUSTOMER_STATUS_LABEL[row.status]}
-                tone={row.status === "active" ? "success" : "danger"}
+                label={ADMIN_CUSTOMER_STATUS_LABEL[row.status]}
+                tone={customerTone(row.status)}
               />
-            ),
-          },
-          {
-            key: "city",
-            header: "Cidade",
-            render: (row) => `${row.city}/${row.state}`,
-          },
-          {
-            key: "tags",
-            header: "Tags",
-            render: (row) => row.tags.join(", ") || "—",
-          },
-          {
-            key: "actions",
-            header: "Ações",
-            render: (row) => (
-              <button
-                type="button"
-                className={sharedStyles.linkBtn}
-                onClick={() => setBlockTarget(row)}
-              >
-                {row.status === "active" ? "Bloquear" : "Desbloquear"}
-              </button>
-            ),
-          },
-        ]}
-        mobileCard={(row) => (
-          <>
-            <Link href={`/admin/clientes/${row.id}`} className={sharedStyles.linkBtn}>
-              {row.name}
-            </Link>
-            <span>{row.email}</span>
-            <AdminStatusBadge
-              label={CUSTOMER_STATUS_LABEL[row.status]}
-              tone={row.status === "active" ? "success" : "danger"}
-            />
-          </>
-        )}
-      />
+              <span>{formatDate(row.createdAt)}</span>
+            </>
+          )}
+        />
+      )}
 
-      <AdminPagination
-        page={paged.page}
-        pages={paged.pages}
-        total={paged.total}
-        onChange={setPage}
-      />
+      <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
+        <button
+          type="button"
+          className={sharedStyles.btnGhost}
+          disabled={pageIndex === 0 || isLoading}
+          onClick={goPrevious}
+        >
+          Anterior
+        </button>
+        <span>Página {pageIndex + 1}</span>
+        <button
+          type="button"
+          className={sharedStyles.btnGhost}
+          disabled={!hasNextPage || isLoading}
+          onClick={goNext}
+        >
+          Próxima
+        </button>
+      </div>
 
       <AdminConfirmDialog
-        open={Boolean(blockTarget)}
-        title={
-          blockTarget?.status === "active" ? "Bloquear cliente" : "Desbloquear cliente"
-        }
-        description={`Confirma alterar o status de ${blockTarget?.name ?? ""}?`}
+        open={Boolean(statusTarget)}
+        title={statusTarget?.status === "BLOCKED" ? "Desbloquear cliente" : "Bloquear cliente"}
+        description={`Confirma alterar o status de ${statusTarget?.fullName ?? statusTarget?.email ?? ""}?`}
         confirmLabel="Confirmar"
-        onClose={() => setBlockTarget(null)}
-        onConfirm={() => {
-          if (!blockTarget) return;
-          const nextStatus: CustomerStatus =
-            blockTarget.status === "active" ? "blocked" : "active";
-          refresh(repo.changeCustomerStatus(blockTarget.id, nextStatus));
-          setBlockTarget(null);
-          toast.push(
-            nextStatus === "blocked" ? "Cliente bloqueado" : "Cliente desbloqueado",
-          );
-        }}
+        busy={pendingActionId === statusTarget?.id}
+        onConfirm={() => void confirmStatusChange()}
+        onClose={() => setStatusTarget(null)}
       />
     </div>
   );

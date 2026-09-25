@@ -1,298 +1,290 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useAdminData } from "@/features/admin/hooks/useAdminData";
-import { PAYMENT_STATUS_LABEL } from "@/features/admin/domain/status";
-import type { FinancialTransaction, PaymentStatus } from "@/features/admin/domain/types";
-import { formatMoney } from "@/features/admin/utils/currency";
-import { downloadCsv, toCsv } from "@/features/admin/utils/csv";
-import { includesQuery, paginate, sortBy } from "@/features/admin/utils/filters";
-import { formatDate } from "@/features/admin/utils/dates";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Clock, WalletCards, XCircle } from "lucide-react";
+import {
+  listAdminOrders,
+  listAdminSellers,
+  type AdminSeller,
+  type AdminSellerOrder,
+} from "@/lib/api/admin";
+import { ApiError } from "@/lib/api/client";
+import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/api/orders";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
-import {
-  AdminMetricCard,
-  AdminMetricsRow,
-} from "@/components/admin/shared/AdminMetricCard";
-import {
-  AdminDataTable,
-  sharedStyles,
-} from "@/components/admin/shared/AdminDataTable";
-import {
-  AdminFilterBar,
-  AdminPagination,
-  AdminStatusBadge,
-  Field,
-} from "@/components/admin/shared/AdminStatusBadge";
-import { useAdminToast } from "@/components/admin/shared/AdminToastProvider";
-import { PaymentMethodsChart } from "@/components/admin/charts/PaymentMethodsChart";
-import { FinanceRevenueChart } from "@/components/admin/charts/FinanceRevenueChart";
-import { WalletCards } from "lucide-react";
-import moduleStyles from "./modules.module.css";
+import { AdminMetricCard, AdminMetricsRow } from "@/components/admin/shared/AdminMetricCard";
+import { AdminDataTable, sharedStyles } from "@/components/admin/shared/AdminDataTable";
+import { AdminStatusBadge, AdminEmptyState } from "@/components/admin/shared/AdminStatusBadge";
+
+/**
+ * Real financeiro admin, via GET /admin/orders (orders-service, novo este
+ * sprint — ver status-migracao-microservicos.md, "Financeiro do
+ * vendedor"/admin). Substitui o mock antigo baseado em AdminDataContext
+ * (db.transactions, todo dado inventado: forma de pagamento, ranking de
+ * vendedor por líquido, série de receita).
+ *
+ * Removidos de propósito, mesmo raciocínio já aplicado em
+ * SellerFinanceView.tsx: comissão, taxas, líquido e repasses — sempre 0 ou
+ * inexistentes em qualquer backend real desta v1. Também removidos:
+ * breakdown por forma de pagamento (o único provider gravado hoje é
+ * "mock" — MockPaymentGatewayAdapter, ver schema.prisma de orders-service)
+ * e ranking de vendedor por líquido (líquido é sempre 0). Decisão do
+ * Arthur em 24/09.
+ *
+ * `AdminSellerOrder` não traz nome de loja (sem FK cross-schema pro join
+ * no backend) — resolvido aqui client-side com um segundo fetch a
+ * GET /admin/sellers, mesmo padrão de mapa id->nome já usado em outros
+ * pontos do admin panel.
+ */
+
+const SUMMARY_LIMIT = 100;
+const TABLE_PAGE_SIZE = 10;
+
+const PAID_STATUSES: OrderStatus[] = ["PAID", "FULFILLING", "COMPLETED"];
+
+function orderStatusTone(status: OrderStatus) {
+  if (status === "PAID" || status === "COMPLETED") return "success" as const;
+  if (status === "FULFILLING") return "muted" as const;
+  if (status === "PENDING_PAYMENT") return "warning" as const;
+  return "danger" as const;
+}
+
+function formatMoney(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+interface Summary {
+  paidCents: number;
+  paidCount: number;
+  pendingCents: number;
+  pendingCount: number;
+  cancelledCents: number;
+  cancelledCount: number;
+}
+
+function buildSummary(orders: AdminSellerOrder[]): Summary {
+  const summary: Summary = {
+    paidCents: 0,
+    paidCount: 0,
+    pendingCents: 0,
+    pendingCount: 0,
+    cancelledCents: 0,
+    cancelledCount: 0,
+  };
+
+  for (const sellerOrder of orders) {
+    const status = sellerOrder.order.status;
+    if (PAID_STATUSES.includes(status)) {
+      summary.paidCents += sellerOrder.subtotalCents;
+      summary.paidCount += 1;
+    } else if (status === "PENDING_PAYMENT") {
+      summary.pendingCents += sellerOrder.subtotalCents;
+      summary.pendingCount += 1;
+    } else if (status === "CANCELLED") {
+      summary.cancelledCents += sellerOrder.subtotalCents;
+      summary.cancelledCount += 1;
+    }
+  }
+
+  return summary;
+}
 
 export function FinanceView() {
-  const { db, isHydrated } = useAdminData();
-  const toast = useAdminToast();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<PaymentStatus | "all">("all");
-  const [page, setPage] = useState(1);
+  // Resumo + mapa de nomes de loja: uma leitura só, sobre até
+  // SUMMARY_LIMIT pedidos/vendedores mais recentes (backend só pagina por
+  // cursor, sem endpoint de agregação em nenhum serviço deste projeto —
+  // mesma aproximação do Painel do vendedor e do dashboard admin).
+  const [summaryOrders, setSummaryOrders] = useState<AdminSellerOrder[] | null>(null);
+  const [sellers, setSellers] = useState<AdminSeller[] | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+
+  // Tabela: paginada por cursor, mesmo padrão de SellersView/SellerFinanceView.
+  const [tableOrders, setTableOrders] = useState<AdminSellerOrder[] | null>(null);
+  const [tableError, setTableError] = useState<string | null>(null);
+  const [isTableLoading, setIsTableLoading] = useState(true);
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [tableHasNextPage, setTableHasNextPage] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      listAdminOrders({ limit: SUMMARY_LIMIT }),
+      listAdminSellers({ limit: SUMMARY_LIMIT }),
+    ])
+      .then(([ordersPage, sellersPage]) => {
+        if (cancelled) return;
+        setSummaryOrders(ordersPage.items);
+        setSellers(sellersPage.items);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSummaryOrders(null);
+        setSummaryError(
+          err instanceof ApiError ? err.message : "Não foi possível carregar o resumo financeiro.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsSummaryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadTablePage = useCallback(async (cursor: string | null) => {
+    setIsTableLoading(true);
+    setTableError(null);
+    try {
+      const page = await listAdminOrders({ limit: TABLE_PAGE_SIZE, cursor });
+      setTableOrders(page.items);
+      setTableHasNextPage(page.pageInfo.hasNextPage);
+    } catch (err) {
+      setTableOrders(null);
+      setTableError(
+        err instanceof ApiError ? err.message : "Não foi possível carregar as transações.",
+      );
+    } finally {
+      setIsTableLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTablePage(cursorStack[pageIndex] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIndex, loadTablePage]);
+
+  function goNext() {
+    if (!tableHasNextPage || !tableOrders || tableOrders.length === 0) return;
+    const nextCursor = tableOrders[tableOrders.length - 1]?.id ?? null;
+    setCursorStack((stack) => {
+      const next = stack.slice(0, pageIndex + 1);
+      next.push(nextCursor);
+      return next;
+    });
+    setPageIndex((index) => index + 1);
+  }
+
+  function goPrevious() {
+    if (pageIndex === 0) return;
+    setPageIndex((index) => index - 1);
+  }
 
   const sellerName = useMemo(() => {
-    const map = new Map(db.sellers.map((s) => [s.id, s.name]));
+    const map = new Map((sellers ?? []).map((s) => [s.id, s.tradeName]));
     return (id: string) => map.get(id) ?? id;
-  }, [db.sellers]);
+  }, [sellers]);
 
   const summary = useMemo(() => {
-    const approved = db.transactions.filter((t) => t.paymentStatus === "approved");
-    const gross = approved.reduce((sum, t) => sum + t.grossCents, 0);
-    const fees = approved.reduce((sum, t) => sum + t.feeCents, 0);
-    const commission = approved.reduce((sum, t) => sum + t.commissionCents, 0);
-    const net = approved.reduce((sum, t) => sum + t.netCents, 0);
-    return { gross, fees, commission, net, count: approved.length };
-  }, [db.transactions]);
-
-  const methodBreakdown = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const txn of db.transactions.filter((t) => t.paymentStatus === "approved")) {
-      map.set(txn.paymentMethod, (map.get(txn.paymentMethod) ?? 0) + txn.grossCents);
-    }
-    return [...map.entries()].map(([method, value]) => ({ method, value }));
-  }, [db.transactions]);
-
-  const sellerRanking = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const txn of db.transactions.filter((t) => t.paymentStatus === "approved")) {
-      map.set(txn.sellerId, (map.get(txn.sellerId) ?? 0) + txn.netCents);
-    }
-    return [...map.entries()]
-      .map(([sellerId, net]) => ({ sellerId, net, name: sellerName(sellerId) }))
-      .sort((a, b) => b.net - a.net)
-      .slice(0, 5);
-  }, [db.transactions, sellerName]);
-
-  const revenueSeries = useMemo(() => {
-    const buckets = new Map<string, { grossCents: number; netCents: number }>();
-    for (const txn of db.transactions.filter((t) => t.paymentStatus === "approved")) {
-      const key = txn.createdAt.slice(0, 10);
-      const current = buckets.get(key) ?? { grossCents: 0, netCents: 0 };
-      current.grossCents += txn.grossCents;
-      current.netCents += txn.netCents;
-      buckets.set(key, current);
-    }
-    return [...buckets.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([iso, values]) => ({
-        label: new Date(iso).toLocaleDateString("pt-BR", {
-          day: "2-digit",
-          month: "short",
-        }),
-        ...values,
-      }));
-  }, [db.transactions]);
-
-  const filtered = useMemo(() => {
-    const list = db.transactions.filter((txn) => {
-      if (status !== "all" && txn.paymentStatus !== status) return false;
-      return includesQuery(
-        `${txn.id} ${txn.orderId} ${sellerName(txn.sellerId)} ${txn.paymentMethod}`,
-        query,
-      );
-    });
-    return sortBy(list, (t) => t.createdAt, "desc");
-  }, [db.transactions, query, status, sellerName]);
-
-  const paged = paginate(filtered, page, 8);
-
-  function exportCsv() {
-    downloadCsv(
-      "financeiro-transacoes.csv",
-      toCsv(
-        ["ID", "Pedido", "Vendedor", "Bruto", "Taxa", "Comissão", "Líquido", "Status"],
-        filtered.map((t) => [
-          t.id,
-          t.orderId,
-          sellerName(t.sellerId),
-          formatMoney(t.grossCents),
-          formatMoney(t.feeCents),
-          formatMoney(t.commissionCents),
-          formatMoney(t.netCents),
-          PAYMENT_STATUS_LABEL[t.paymentStatus],
-        ]),
-      ),
-    );
-    toast.push("CSV exportado");
-  }
-
-  if (!isHydrated) {
-    return <div className={sharedStyles.skeleton} aria-busy="true" />;
-  }
+    if (!summaryOrders) return null;
+    return buildSummary(summaryOrders);
+  }, [summaryOrders]);
 
   return (
     <div className={sharedStyles.stack}>
       <AdminPageHeader
         title="Financeiro"
-        description="Resumo de receitas, métodos de pagamento e ranking de sellers."
-        icon={<WalletCards size={18} strokeWidth={1.75} aria-hidden="true" />}
-        actions={
-          <>
-            <Link href="/admin/financeiro/integracoes" className={sharedStyles.btnGhost}>
-              Integrações
-            </Link>
-            <Link href="/admin/financeiro/repasses" className={sharedStyles.btnGhost}>
-              Repasses
-            </Link>
-            <button type="button" className={sharedStyles.btnSecondary} onClick={exportCsv}>
-              Exportar CSV
-            </button>
-          </>
-        }
+        description={`Faturamento por status de pagamento em toda a plataforma, calculado a partir dos pedidos reais (até os ${SUMMARY_LIMIT} mais recentes).`}
       />
 
-      <AdminMetricsRow>
-        <AdminMetricCard label="Bruto aprovado" value={formatMoney(summary.gross)} />
-        <AdminMetricCard label="Taxas" value={formatMoney(summary.fees)} />
-        <AdminMetricCard label="Comissões" value={formatMoney(summary.commission)} />
-        <AdminMetricCard label="Líquido sellers" value={formatMoney(summary.net)} />
-      </AdminMetricsRow>
-
-      <div className={sharedStyles.grid2}>
-        <div className={sharedStyles.panel}>
-          <h2 className={sharedStyles.panelTitle}>Evolução da receita</h2>
-          <FinanceRevenueChart data={revenueSeries} />
-        </div>
-        <div className={sharedStyles.panel}>
-          <h2 className={sharedStyles.panelTitle}>Métodos de pagamento</h2>
-          <PaymentMethodsChart data={methodBreakdown} />
-        </div>
-      </div>
-
-      <div className={sharedStyles.panel}>
-        <h2 className={sharedStyles.panelTitle}>Ranking de vendedores</h2>
-        <ul className={moduleStyles.timeline}>
-          {sellerRanking.map((item) => (
-            <li key={item.sellerId} className={moduleStyles.timelineItem}>
-              <Link
-                href={`/admin/vendedores/${item.sellerId}`}
-                className={sharedStyles.linkBtn}
-              >
-                {item.name}
-              </Link>
-              <p className={moduleStyles.timelineDetail}>{formatMoney(item.net)}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <AdminFilterBar>
-        <Field label="Buscar">
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
+      {isSummaryLoading ? (
+        <p role="status" aria-live="polite">
+          Carregando resumo…
+        </p>
+      ) : summaryError || !summary ? (
+        <AdminEmptyState
+          title="Não foi possível carregar o resumo"
+          description={summaryError ?? undefined}
+        />
+      ) : (
+        <AdminMetricsRow>
+          <AdminMetricCard
+            label="Pago"
+            value={formatMoney(summary.paidCents)}
+            hint={`${summary.paidCount} pedido(s)`}
+            icon={WalletCards}
           />
-        </Field>
-        <Field label="Status">
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value as PaymentStatus | "all");
-              setPage(1);
-            }}
-          >
-            <option value="all">Todos</option>
-            {(Object.keys(PAYMENT_STATUS_LABEL) as PaymentStatus[]).map((key) => (
-              <option key={key} value={key}>
-                {PAYMENT_STATUS_LABEL[key]}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </AdminFilterBar>
+          <AdminMetricCard
+            label="Aguardando pagamento"
+            value={formatMoney(summary.pendingCents)}
+            hint={`${summary.pendingCount} pedido(s)`}
+            icon={Clock}
+          />
+          <AdminMetricCard
+            label="Cancelado"
+            value={formatMoney(summary.cancelledCents)}
+            hint={`${summary.cancelledCount} pedido(s)`}
+            icon={XCircle}
+          />
+        </AdminMetricsRow>
+      )}
 
-      <AdminDataTable
-        caption="Transações"
-        rows={paged.items}
-        columns={[
-          {
-            key: "id",
-            header: "Transação",
-            render: (row: FinancialTransaction) => (
-              <Link
-                href={`/admin/financeiro/transacoes/${row.id}`}
-                className={sharedStyles.linkBtn}
-              >
-                {row.id}
-              </Link>
-            ),
-          },
-          {
-            key: "order",
-            header: "Pedido",
-            render: (row) => (
-              <Link href={`/admin/pedidos/${row.orderId}`} className={sharedStyles.linkBtn}>
-                {db.orders.find((o) => o.id === row.orderId)?.code ?? row.orderId}
-              </Link>
-            ),
-          },
-          {
-            key: "seller",
-            header: "Vendedor",
-            render: (row) => sellerName(row.sellerId),
-          },
-          {
-            key: "gross",
-            header: "Bruto",
-            render: (row) => formatMoney(row.grossCents),
-          },
-          {
-            key: "net",
-            header: "Líquido",
-            render: (row) => formatMoney(row.netCents),
-          },
-          {
-            key: "status",
-            header: "Status",
-            render: (row) => (
+      {isTableLoading ? (
+        <p role="status">Carregando transações…</p>
+      ) : tableError ? (
+        <AdminEmptyState title="Não foi possível carregar as transações" description={tableError} />
+      ) : (
+        <AdminDataTable
+          caption="Transações de todas as lojas"
+          rows={tableOrders ?? []}
+          columns={[
+            { key: "order", header: "Pedido", render: (row) => row.order.orderNumber },
+            { key: "seller", header: "Loja", render: (row) => sellerName(row.sellerId) },
+            { key: "date", header: "Data", render: (row) => formatDate(row.createdAt) },
+            {
+              key: "status",
+              header: "Status do pagamento",
+              render: (row) => (
+                <AdminStatusBadge
+                  label={ORDER_STATUS_LABEL[row.order.status]}
+                  tone={orderStatusTone(row.order.status)}
+                />
+              ),
+            },
+            { key: "value", header: "Valor", render: (row) => formatMoney(row.subtotalCents) },
+          ]}
+          mobileCard={(row) => (
+            <>
+              <strong>{row.order.orderNumber}</strong>
+              <span>{sellerName(row.sellerId)}</span>
               <AdminStatusBadge
-                label={PAYMENT_STATUS_LABEL[row.paymentStatus]}
-                tone={
-                  row.paymentStatus === "approved"
-                    ? "success"
-                    : row.paymentStatus === "refunded"
-                      ? "danger"
-                      : "warning"
-                }
+                label={ORDER_STATUS_LABEL[row.order.status]}
+                tone={orderStatusTone(row.order.status)}
               />
-            ),
-          },
-          {
-            key: "date",
-            header: "Data",
-            render: (row) => formatDate(row.createdAt),
-          },
-        ]}
-        mobileCard={(row) => (
-          <>
-            <Link
-              href={`/admin/financeiro/transacoes/${row.id}`}
-              className={sharedStyles.linkBtn}
-            >
-              {row.id}
-            </Link>
-            <span>{formatMoney(row.grossCents)}</span>
-            <AdminStatusBadge label={PAYMENT_STATUS_LABEL[row.paymentStatus]} />
-          </>
-        )}
-      />
+              <span>
+                {formatMoney(row.subtotalCents)} · {formatDate(row.createdAt)}
+              </span>
+            </>
+          )}
+        />
+      )}
 
-      <AdminPagination
-        page={paged.page}
-        pages={paged.pages}
-        total={paged.total}
-        onChange={setPage}
-      />
+      <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
+        <button
+          type="button"
+          className={sharedStyles.btnGhost}
+          disabled={pageIndex === 0 || isTableLoading}
+          onClick={goPrevious}
+        >
+          Anterior
+        </button>
+        <span>Página {pageIndex + 1}</span>
+        <button
+          type="button"
+          className={sharedStyles.btnGhost}
+          disabled={!tableHasNextPage || isTableLoading}
+          onClick={goNext}
+        >
+          Próxima
+        </button>
+      </div>
     </div>
   );
 }

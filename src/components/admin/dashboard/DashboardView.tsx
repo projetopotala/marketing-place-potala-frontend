@@ -61,13 +61,15 @@ const METRIC_ICONS: Record<string, LucideIcon> = {
 /**
  * Reescrito nesta sessão pra usar dado real (ver "dashboard do admin —
  * versão enxuta real" em status-migracao-microservicos.md, Claude
- * Project). O backend só tem dois endpoints de admin de verdade hoje
- * (GET /admin/sellers e GET /admin/categories) — não existe nenhum
- * endpoint admin-wide de pedidos, financeiro ou produtos-por-vendedor em
- * nenhum dos 4 serviços (confirmado por inspeção direta do código-fonte
- * de cada um). Por isso este painel ficou bem mais enxuto que o mock
- * anterior: sem gráficos, sem financeiro, sem "pedidos recentes" admin,
- * sem "top produtos" — só o que dá pra sustentar com dado real hoje:
+ * Project). Na época, o backend só tinha dois endpoints de admin de
+ * verdade (GET /admin/sellers e GET /admin/categories) — sem nenhum
+ * admin-wide de pedidos/financeiro/produtos-por-vendedor em nenhum dos 4
+ * serviços. Isso mudou em 24/09: GET /admin/orders (orders-service) já
+ * existe e alimenta a tela de Financeiro admin (FinanceView.tsx) — mas
+ * este painel aqui continua enxuto de propósito, sem puxar esse endpoint:
+ * não é escopo pedido pelo Arthur mexer no dashboard agora, só no
+ * Financeiro. Por isso ainda sem gráficos, sem "pedidos recentes" admin,
+ * sem "top produtos" aqui — só o que já sustentava com dado real antes:
  * vendedores (com contagem por status), aprovações pendentes, categorias
  * e total de produtos ativos na vitrine pública.
  */
