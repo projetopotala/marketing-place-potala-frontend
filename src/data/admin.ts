@@ -25,7 +25,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     ],
   },
   { id: "pedidos", label: "Pedidos", href: "/admin/pedidos" },
-  { id: "entregas", label: "Entregas", href: "/admin/entregas" },
   {
     id: "financeiro",
     label: "Financeiro",

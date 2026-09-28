@@ -24,12 +24,11 @@ function formatMoney(cents: number): string {
  * SellerOrder de outra loja (não 403), mesmo padrão de "404 indistinguível"
  * do resto da API — ApiError já chega com essa mensagem pronta do backend.
  *
- * Somente leitura nesta v1 (ver status-migracao-microservicos.md, "Fase 3 —
- * pedidos do vendedor"): a versão mock tinha avançar-status, registrar
- * rastreio e uma timeline de eventos — nenhum desses tem equivalente no
- * backend real ainda (SellerOrdersController só expõe GET), então ficaram
- * de fora aqui deliberadamente, como um follow-up separado e já sinalizado
- * a Arthur.
+ * Somente leitura aqui: a versão mock tinha avançar-status, registrar
+ * rastreio e uma timeline de eventos. Avançar status agora é real (28/09),
+ * mas mora no painel "Entregas" (SellerShipmentsView.tsx), não aqui, pra
+ * não duplicar UI — registrar rastreio e a timeline continuam sem
+ * equivalente no backend (não existem os campos), fora de escopo.
  */
 export function SellerOrderDetailView() {
   const params = useParams<{ id: string }>();

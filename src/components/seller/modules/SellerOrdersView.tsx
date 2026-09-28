@@ -28,10 +28,10 @@ function formatDate(iso: string): string {
  * substitui o mock antigo baseado em AdminDataContext (ver
  * status-migracao-microservicos.md, "Fase 3 — pedidos do vendedor").
  *
- * Somente leitura nesta v1: sem busca por texto, sem filtro por status (o
- * backend só pagina por cursor) e sem ações de avançar status/registrar
- * rastreio — a versão mock tinha as duas coisas, deliberadamente deixadas de
- * fora aqui (ver comentário em SellerOrderDetailView.tsx e o status doc).
+ * Somente leitura aqui: sem busca por texto, sem filtro por status (o
+ * backend só pagina por cursor) e sem ação de avançar status — essa ação
+ * mora no painel "Entregas" (SellerShipmentsView.tsx, 28/09), não aqui,
+ * pra não duplicar UI; ver o status doc.
  */
 export function SellerOrdersView() {
   const [orders, setOrders] = useState<SellerOrderForSellerResponse[] | null>(null);

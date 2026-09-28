@@ -234,10 +234,11 @@ export async function getMyOrder(id: string): Promise<OrderResponse> {
  * `SellerOrder` do próprio vendedor autenticado — nunca as linhas de outros
  * vendedores do mesmo pedido — acrescido de um resumo do `Order` pai
  * (`orderNumber`, `status` do pedido todo, `createdAt`, `shippingAddress`)
- * pra dar contexto de entrega sem expor dados de outro vendedor. Somente
- * leitura nesta v1 (ver status-migracao-microservicos.md, "Fase 3 — pedidos
- * do vendedor"): sem transição de status nem registro de rastreio aqui —
- * isso é um follow-up separado, fora de escopo por ora.
+ * pra dar contexto de entrega sem expor dados de outro vendedor. A partir
+ * de 28/09 (painel "Entregas"), o status de fulfillment passou a ser
+ * escrevível — ver as 4 funções de transição logo abaixo — mas continua
+ * sem transportadora/código de rastreio: esses campos não existem no
+ * backend (escopo confirmado com o Arthur: "só avançar status").
  */
 export interface SellerOrderForSellerResponse extends SellerOrderResponse {
   order: {
@@ -272,4 +273,45 @@ export async function getMySellerOrder(id: string): Promise<SellerOrderForSeller
     throw new Error("Pedido não encontrado.");
   }
   return result;
+}
+
+/**
+ * As 4 transições de fulfillment do pedido da própria loja (painel
+ * "Entregas", 28/09) — um passo explícito por vez, nunca um status
+ * arbitrário (o backend rejeita com 409 qualquer transição fora de
+ * ordem). `CANCELLED` não é alcançável por aqui, só pelo fluxo de
+ * checkout/estorno.
+ */
+async function advanceMySellerOrderStatus(
+  id: string,
+  action: "confirm" | "prepare" | "ship" | "deliver",
+): Promise<SellerOrderForSellerResponse> {
+  const result = await apiFetch<SellerOrderForSellerResponse>(
+    `/seller/orders/${encodeURIComponent(id)}/${action}`,
+    { method: "PATCH" },
+  );
+  if (!result) {
+    throw new Error("Não foi possível atualizar o pedido.");
+  }
+  return result;
+}
+
+/** PENDING -> CONFIRMED. */
+export function confirmMySellerOrder(id: string) {
+  return advanceMySellerOrderStatus(id, "confirm");
+}
+
+/** CONFIRMED -> PREPARING. */
+export function prepareMySellerOrder(id: string) {
+  return advanceMySellerOrderStatus(id, "prepare");
+}
+
+/** PREPARING -> SHIPPED. */
+export function shipMySellerOrder(id: string) {
+  return advanceMySellerOrderStatus(id, "ship");
+}
+
+/** SHIPPED -> DELIVERED. */
+export function deliverMySellerOrder(id: string) {
+  return advanceMySellerOrderStatus(id, "deliver");
 }
