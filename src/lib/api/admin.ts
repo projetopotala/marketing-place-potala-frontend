@@ -386,3 +386,181 @@ export function deactivateAdminProduct(id: string): Promise<AdminProduct> {
 export function totalAdminProductStock(product: AdminProduct): number {
   return product.variants.reduce((sum, v) => sum + v.inventory.quantity, 0);
 }
+
+/**
+ * "Conteúdos / Cursos" (admin) -- pedido de Arthur (28/09), domínio novo
+ * (ver status-migracao-microservicos.md). Real via
+ * GET/POST/PATCH /admin/contents (catalog-service, novo). Substitui o mock
+ * antigo (ContentsView.tsx + ContentDetailView.tsx -- `useAdminData`,
+ * `db.contents`, com busca, filtro por status, exportar CSV, módulos/aulas,
+ * e um contador de "alunos").
+ *
+ * Escopo v1 escolhido com o Arthur via pergunta antes de codar: só cadastro
+ * e moderação (mesmo tamanho da tela mock), sem módulos/aulas, sem compra,
+ * sem aluno consumindo nada -- e só o admin cadastra (instrutor continua
+ * texto livre, sem vínculo com Seller nenhum).
+ *
+ * Removido de propósito, mesmo raciocínio já usado em ProductsView.tsx:
+ * - Sem busca/filtro por status server-side: o backend só pagina por
+ *   cursor (mesma PaginationQueryDto de sempre).
+ * - Sem exportar CSV: só exportaria a página atual.
+ * - Sem "Alunos": não existe matrícula/compra nesta v1 -- o número no mock
+ *   era só decorativo, nunca teve contrapartida real.
+ * - Sem módulos/aulas: fora de escopo desta rodada (decisão explícita).
+ * - Sem link pra tela de detalhe: não existe GET /admin/contents/:id -- a
+ *   ContentDetailView.tsx antiga foi deixada como está, inacessível a
+ *   partir da lista agora, mesma decisão já tomada com
+ *   ProductDetailView.tsx/SellerDetailView.tsx.
+ *
+ * Status é sempre movido por uma das 4 transições dedicadas abaixo, nunca
+ * por um campo `status` solto em POST/PATCH -- mesmo raciocínio do backend
+ * (ver comentário de CreateContentDto/UpdateContentDto).
+ */
+export type AdminContentStatus = "DRAFT" | "REVIEW" | "PUBLISHED" | "REJECTED" | "ARCHIVED";
+export type AdminContentFormat = "VIDEO" | "LIVE" | "TEXT";
+
+export const ADMIN_CONTENT_STATUS_LABEL: Record<AdminContentStatus, string> = {
+  DRAFT: "Rascunho",
+  REVIEW: "Em revisão",
+  PUBLISHED: "Publicado",
+  REJECTED: "Rejeitado",
+  ARCHIVED: "Arquivado",
+};
+
+export const ADMIN_CONTENT_FORMAT_LABEL: Record<AdminContentFormat, string> = {
+  VIDEO: "Vídeo",
+  LIVE: "Ao vivo",
+  TEXT: "Texto",
+};
+
+/** Mirrors AdminContentsController's response shape (catalog-service) exactly. */
+export interface AdminContent {
+  id: string;
+  title: string;
+  instructor: string;
+  category: string;
+  format: AdminContentFormat;
+  priceCents: number;
+  status: AdminContentStatus;
+  description: string;
+  moderationNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * GET /admin/contents -- cursor-paginado, todo o conteúdo (qualquer
+ * status). Sem busca/filtro server-side, mesma PaginationQueryDto de
+ * sempre (só limit/cursor).
+ */
+export async function listAdminContents(params?: {
+  limit?: number;
+  cursor?: string | null;
+}): Promise<Paginated<AdminContent>> {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.cursor) query.set("cursor", params.cursor);
+  const qs = query.toString();
+  const result = await apiFetch<Paginated<AdminContent>>(
+    `/admin/contents${qs ? `?${qs}` : ""}`,
+  );
+  return result ?? { items: [], pageInfo: { hasNextPage: false, nextCursor: null } };
+}
+
+export interface CreateAdminContentInput {
+  title: string;
+  instructor: string;
+  category: string;
+  format: AdminContentFormat;
+  priceCents: number;
+  description?: string;
+}
+
+/** POST /admin/contents -- sempre nasce DRAFT (sem campo status no payload). */
+export async function createAdminContent(
+  input: CreateAdminContentInput,
+): Promise<AdminContent> {
+  const result = await apiFetch<AdminContent>("/admin/contents", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+export interface UpdateAdminContentInput {
+  title?: string;
+  instructor?: string;
+  category?: string;
+  format?: AdminContentFormat;
+  priceCents?: number;
+  description?: string;
+}
+
+/** PATCH /admin/contents/:id -- parcial, nunca muda status (ver as 4 transições abaixo). */
+export async function updateAdminContent(
+  id: string,
+  input: UpdateAdminContentInput,
+): Promise<AdminContent> {
+  const result = await apiFetch<AdminContent>(
+    `/admin/contents/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+/** DRAFT -> REVIEW. */
+export async function submitAdminContentForReview(id: string): Promise<AdminContent> {
+  const result = await apiFetch<AdminContent>(
+    `/admin/contents/${encodeURIComponent(id)}/submit-for-review`,
+    { method: "PATCH" },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+/** REVIEW -> PUBLISHED. */
+export async function approveAdminContent(id: string): Promise<AdminContent> {
+  const result = await apiFetch<AdminContent>(
+    `/admin/contents/${encodeURIComponent(id)}/approve`,
+    { method: "PATCH" },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+/** REVIEW -> REJECTED, com nota opcional (motivo). */
+export async function rejectAdminContent(
+  id: string,
+  note?: string,
+): Promise<AdminContent> {
+  const result = await apiFetch<AdminContent>(
+    `/admin/contents/${encodeURIComponent(id)}/reject`,
+    { method: "PATCH", body: JSON.stringify({ note }) },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+/** PUBLISHED -> ARCHIVED. */
+export async function archiveAdminContent(id: string): Promise<AdminContent> {
+  const result = await apiFetch<AdminContent>(
+    `/admin/contents/${encodeURIComponent(id)}/archive`,
+    { method: "PATCH" },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
