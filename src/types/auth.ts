@@ -30,6 +30,15 @@ export interface Session {
    * rather than letting the user hit real 403s from every request.
    */
   sellerCanOperate?: boolean;
+  /**
+   * Only present for role "seller", same call as sellerId/sellerCanOperate
+   * above. Usado pra montar o link "ver minha loja" (SellerTopbar) pra
+   * `/vendedor/[slug]` real — antes desta sessão essa tela resolvia a loja
+   * por um lookup em `AdminDataContext` (mock local), que nunca batia com
+   * um `sellerId` real e caía num slug de exemplo fixo (bug real, ver
+   * status-migracao-microservicos.md).
+   */
+  sellerSlug?: string;
 }
 
 export type AccessMode = "login" | "register" | "register-seller";

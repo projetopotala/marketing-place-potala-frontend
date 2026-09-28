@@ -33,6 +33,7 @@ interface MeResponse {
 interface SellerOnboardingStatus {
   sellerId: string;
   canOperate: boolean;
+  slug: string;
 }
 
 /**
@@ -124,6 +125,7 @@ async function buildSession(
       ...session,
       sellerId: status?.sellerId,
       sellerCanOperate: status?.canOperate,
+      sellerSlug: status?.slug,
     };
   } catch {
     // sellers-service ainda fora do ar depois das retentativas acima, ou
