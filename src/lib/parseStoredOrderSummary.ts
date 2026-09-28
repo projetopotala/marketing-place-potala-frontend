@@ -95,6 +95,9 @@ export function parseStoredOrderSummary(
       orderId: parsed.orderId,
       items: parsed.items as CheckoutLineItem[],
       subtotal: Number(parsed.subtotal) || 0,
+      // Ausente em resumos legados salvos antes desta rodada -- cai pro
+      // default 0, mesmo raciocínio dos outros campos numéricos aqui.
+      discount: Number(parsed.discount) || 0,
       shippingOption: shippingOption as ShippingOptionId,
       shippingLabel:
         typeof parsed.shippingLabel === "string" ? parsed.shippingLabel : "",

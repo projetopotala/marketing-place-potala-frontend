@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
 import type { ReviewResponse } from "./reviews";
+import type { ReturnResponse } from "./returns";
 
 /**
  * New this session — Fase 2 do plano até 05/10 (checkout real, ver
@@ -85,6 +86,8 @@ export interface CheckoutShippingAddressInput {
 export interface CheckoutInput {
   items: CheckoutItemInput[];
   shippingAddress: CheckoutShippingAddressInput;
+  /** Optional -- validated server-side (CouponsService.resolveForCheckout, orders-service). An invalid/expired/disabled code rejects the whole checkout with a clear message, never silently ignored. */
+  couponCode?: string;
 }
 
 export interface OrderItemResponse {
@@ -106,6 +109,12 @@ export interface OrderItemResponse {
    * detalhe. `null`/ausente = item ainda não avaliado.
    */
   review?: ReviewResponse | null;
+  /**
+   * Mesma observação de `review` acima -- só presente em GET /orders/:id,
+   * nunca na listagem. `null`/ausente = nenhuma devolução solicitada para
+   * este item ainda.
+   */
+  returnRequest?: ReturnResponse | null;
 }
 
 export interface SellerOrderResponse {

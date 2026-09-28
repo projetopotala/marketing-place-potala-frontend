@@ -96,6 +96,10 @@ export function parseCurrentOrderSummary(
   }
 
   if (!isNonNegativeFinite(value.subtotal)) return null;
+  // Ausente em resumos gravados antes desta rodada -- trata como 0 em vez
+  // de invalidar o pedido inteiro (diferente de subtotal/shippingCost/total,
+  // que sempre existiram).
+  const discount = isNonNegativeFinite(value.discount) ? value.discount : 0;
   if (!isNonNegativeFinite(value.shippingCost)) return null;
   if (!isNonNegativeFinite(value.total)) return null;
 
@@ -129,6 +133,7 @@ export function parseCurrentOrderSummary(
     checkoutTransactionId: value.checkoutTransactionId.trim(),
     items,
     subtotal: value.subtotal,
+    discount,
     shippingOption: shippingOption as ShippingOptionId,
     shippingLabel: value.shippingLabel,
     shippingCost: value.shippingCost,

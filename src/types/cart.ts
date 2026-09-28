@@ -40,6 +40,14 @@ export interface OrderSummaryBase {
   orderId: string;
   items: CheckoutLineItem[];
   subtotal: number;
+  /**
+   * Centavos convertidos pra reais, mesmo padrão dos outros campos aqui --
+   * sempre 0 em pedidos sem cupom ou em resumos legados (o campo não
+   * existia antes desta rodada, `parseStoredOrderSummary` cai pro default
+   * 0 quando ausente no JSON salvo). Nunca inferido no cliente -- vem
+   * direto de `response.discountCents` (orders-service).
+   */
+  discount: number;
   shippingOption: ShippingOptionId;
   shippingLabel: string;
   shippingCost: number;

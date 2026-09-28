@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AccountChrome } from "@/components/account/AccountChrome";
 import { OrderItemReviewForm } from "@/components/account/OrderItemReviewForm";
+import { OrderItemReturnForm } from "@/components/account/OrderItemReturnForm";
 import {
   getMyOrder,
   ORDER_STATUS_LABEL,
@@ -12,6 +13,7 @@ import {
   type OrderResponse,
 } from "@/lib/api/orders";
 import type { ReviewResponse } from "@/lib/api/reviews";
+import { RETURN_STATUS_LABEL, type ReturnResponse } from "@/lib/api/returns";
 import { ApiError } from "@/lib/api/client";
 import { formatPrice } from "@/data/marketplace";
 
@@ -79,6 +81,22 @@ export default function AccountOrderDetailPage() {
     });
   }
 
+  /** Mesmo raciocínio de handleReviewSubmitted acima — evita recarregar o pedido inteiro pra refletir uma devolução solicitada. */
+  function handleReturnSubmitted(itemId: string, returnRequest: ReturnResponse) {
+    setOrder((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        sellerOrders: current.sellerOrders.map((sellerOrder) => ({
+          ...sellerOrder,
+          items: sellerOrder.items.map((item) =>
+            item.id === itemId ? { ...item, returnRequest } : item,
+          ),
+        })),
+      };
+    });
+  }
+
   return (
     <AccountChrome
       title={order ? `Pedido ${order.orderNumber}` : "Pedido"}
@@ -125,6 +143,27 @@ export default function AccountOrderDetailPage() {
                         />
                       )
                     ) : null}
+                    {sellerOrder.status === "CONFIRMED" ? (
+                      item.returnRequest ? (
+                        <p
+                          style={{
+                            margin: "4px 0 0",
+                            color: "var(--potala-muted, #6b6b6b)",
+                          }}
+                        >
+                          Devolução: {RETURN_STATUS_LABEL[item.returnRequest.status]} —{" "}
+                          {item.returnRequest.reason}
+                        </p>
+                      ) : (
+                        <OrderItemReturnForm
+                          orderId={order.id}
+                          itemId={item.id}
+                          onSubmitted={(returnRequest) =>
+                            handleReturnSubmitted(item.id, returnRequest)
+                          }
+                        />
+                      )
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -134,6 +173,9 @@ export default function AccountOrderDetailPage() {
           <section>
             <h2>Totais</h2>
             <p>Subtotal {formatPrice(order.subtotalCents / 100)}</p>
+            {order.discountCents > 0 ? (
+              <p>Desconto -{formatPrice(order.discountCents / 100)}</p>
+            ) : null}
             <p>Frete {formatPrice(order.shippingCents / 100)}</p>
             <p>Total {formatPrice(order.totalCents / 100)}</p>
           </section>

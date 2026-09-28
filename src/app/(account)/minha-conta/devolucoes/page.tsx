@@ -1,144 +1,121 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { AccountChrome } from "@/components/account/AccountChrome";
-import { useAccountData } from "@/features/account/AccountDataContext";
+import { ApiError } from "@/lib/api/client";
+import {
+  RETURN_STATUS_LABEL,
+  listMyReturns,
+  type ReturnListItemResponse,
+} from "@/lib/api/returns";
 
+const PAGE_SIZE = 10;
+
+/**
+ * Real via GET /orders/returns (orders-service, através do gateway) --
+ * substitui o mock antigo (`useAccountData`, `db.returns`, `createReturn`
+ * em localStorage). Diferente da tela antiga, esta página agora é só
+ * leitura -- solicitar uma devolução acontece no detalhe do pedido
+ * (`/minha-conta/pedidos/[id]`, `OrderItemReturnForm`), mesmo lugar onde
+ * já vive o formulário de avaliação, porque a elegibilidade (SellerOrder
+ * CONFIRMED) e a identidade do item só existem naquela tela -- juntar tudo
+ * aqui de novo exigiria refazer a mesma busca de pedidos elegíveis, sem
+ * ganho real.
+ */
 export default function AccountReturnsPage() {
-  const { db, isHydrated, createReturn } = useAccountData();
-  const delivered = useMemo(
-    () => db?.orders.filter((order) => order.status === "delivered") ?? [],
-    [db?.orders],
-  );
-  const [orderId, setOrderId] = useState("");
-  const [items, setItems] = useState<string[]>([]);
-  const [reason, setReason] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
+  const [returns, setReturns] = useState<ReturnListItemResponse[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
 
-  const selectedOrder = delivered.find((order) => order.id === orderId);
+  const loadPage = useCallback(async (cursor: string | null) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const page = await listMyReturns({ limit: PAGE_SIZE, cursor });
+      setReturns(page.items);
+      setHasNextPage(page.pageInfo.hasNextPage);
+    } catch (err) {
+      setReturns(null);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível carregar suas devoluções.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  function toggleItem(productId: string) {
-    setItems((current) =>
-      current.includes(productId)
-        ? current.filter((id) => id !== productId)
-        : [...current, productId],
-    );
+  useEffect(() => {
+    void loadPage(cursorStack[pageIndex] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIndex, loadPage]);
+
+  function goNext() {
+    if (!hasNextPage || !returns || returns.length === 0) return;
+    const nextCursor = returns[returns.length - 1]?.id ?? null;
+    setCursorStack((stack) => {
+      const next = stack.slice(0, pageIndex + 1);
+      next.push(nextCursor);
+      return next;
+    });
+    setPageIndex((index) => index + 1);
   }
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    const result = createReturn({
-      orderId,
-      itemProductIds: items,
-      reason,
-      description,
-    });
-    if (!result.ok) {
-      setStatus(result.error);
-      return;
-    }
-    setStatus("Solicitação registrada (demonstrativo).");
-    setOrderId("");
-    setItems([]);
-    setReason("");
-    setDescription("");
+  function goPrevious() {
+    if (pageIndex === 0) return;
+    setPageIndex((index) => index - 1);
   }
 
   return (
     <AccountChrome
       title="Devoluções"
-      lead="Somente pedidos entregues são elegíveis neste demo."
+      lead="Solicite uma devolução no detalhe de um pedido confirmado. Aqui ficam suas solicitações."
       breadcrumbCurrent="Devoluções"
     >
-      {!isHydrated || !db ? (
-        <p role="status">Carregando…</p>
-      ) : (
-        <>
-          <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12, maxWidth: 560 }}>
-            <div>
-              <label htmlFor="ret-order">Pedido entregue</label>
-              <select
-                id="ret-order"
-                value={orderId}
-                onChange={(event) => {
-                  setOrderId(event.target.value);
-                  setItems([]);
-                }}
-                style={{ width: "100%", minHeight: 44 }}
-              >
-                <option value="">Selecione</option>
-                {delivered.map((order) => (
-                  <option key={order.id} value={order.id}>
-                    {order.code}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <p>
+        Para solicitar uma devolução, acesse{" "}
+        <Link href="/minha-conta/pedidos">Meus Pedidos</Link> e abra o
+        pedido desejado -- o formulário aparece nos itens já confirmados
+        pelo vendedor.
+      </p>
 
-            {selectedOrder ? (
-              <fieldset>
-                <legend>Itens</legend>
-                {selectedOrder.items.map((item) => (
-                  <label
-                    key={item.productId}
-                    style={{ display: "flex", gap: 8, minHeight: 44, alignItems: "center" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={items.includes(item.productId)}
-                      onChange={() => toggleItem(item.productId)}
-                    />
-                    {item.name}
-                  </label>
-                ))}
-              </fieldset>
-            ) : null}
+      <section style={{ marginTop: 24 }}>
+        <h2>Solicitações</h2>
+        {isLoading ? (
+          <p role="status">Carregando…</p>
+        ) : error ? (
+          <p role="alert" style={{ color: "var(--potala-danger, #c95c57)" }}>
+            {error}
+          </p>
+        ) : !returns || returns.length === 0 ? (
+          <p>Nenhuma devolução solicitada ainda.</p>
+        ) : (
+          <ul>
+            {returns.map((item) => (
+              <li key={item.id} style={{ marginBottom: 8 }}>
+                Pedido {item.orderItem.sellerOrder.order.orderNumber} ·{" "}
+                {item.orderItem.productTitle} ·{" "}
+                {RETURN_STATUS_LABEL[item.status]} · {item.reason}
+              </li>
+            ))}
+          </ul>
+        )}
 
-            <div>
-              <label htmlFor="ret-reason">Motivo</label>
-              <input
-                id="ret-reason"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                style={{ width: "100%", minHeight: 44 }}
-              />
-            </div>
-            <div>
-              <label htmlFor="ret-desc">Descrição</label>
-              <textarea
-                id="ret-desc"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                style={{ width: "100%", minHeight: 110 }}
-              />
-            </div>
-            <button type="submit" style={{ minHeight: 44 }}>
-              Enviar solicitação
-            </button>
-            {status ? (
-              <p role="status" aria-live="polite">
-                {status}
-              </p>
-            ) : null}
-          </form>
-
-          <section style={{ marginTop: 24 }}>
-            <h2>Solicitações</h2>
-            {db.returns.length === 0 ? (
-              <p>Nenhuma devolução registrada.</p>
-            ) : (
-              <ul>
-                {db.returns.map((item) => (
-                  <li key={item.id}>
-                    {item.orderCode} · {item.status} · {item.reason}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
+        <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
+          <button type="button" disabled={pageIndex === 0 || isLoading} onClick={goPrevious}>
+            Anterior
+          </button>
+          <span>Página {pageIndex + 1}</span>
+          <button type="button" disabled={!hasNextPage || isLoading} onClick={goNext}>
+            Próxima
+          </button>
+        </div>
+      </section>
     </AccountChrome>
   );
 }

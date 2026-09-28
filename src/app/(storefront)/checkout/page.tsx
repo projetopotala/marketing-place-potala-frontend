@@ -71,6 +71,7 @@ function buildOrderSummaryFromResponse(
     checkoutTransactionId: response.id,
     items,
     subtotal: response.subtotalCents / 100,
+    discount: response.discountCents / 100,
     shippingOption: context.shipping,
     shippingLabel: context.shippingLabel,
     shippingCost: response.shippingCents / 100,
@@ -117,6 +118,7 @@ function CheckoutForm() {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [shipping, setShipping] = useState<ShippingOptionId>("economic");
+  const [couponCode, setCouponCode] = useState("");
   const [payment, setPayment] = useState<CheckoutPaymentMethod>("pix");
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<string | null>(null);
@@ -223,6 +225,12 @@ function CheckoutForm() {
           state: state.trim().toUpperCase(),
           postalCode: cep.trim(),
         },
+        // Backend valida (código, janela de vigência, habilitado) e
+        // rejeita o checkout inteiro com uma mensagem clara se inválido
+        // (CouponsService.resolveForCheckout, orders-service) -- ver
+        // status-migracao-microservicos.md. Omitido quando vazio: o campo
+        // é opcional, sem cupom nenhum aplicado.
+        ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
       });
 
       const canonicalOrder = buildOrderSummaryFromResponse(response, {
@@ -582,6 +590,18 @@ function CheckoutForm() {
                 </li>
               ))}
             </ul>
+
+            <div className={styles.field}>
+              <label htmlFor="checkout-coupon">Cupom de desconto (opcional)</label>
+              <input
+                id="checkout-coupon"
+                value={couponCode}
+                onChange={(event) => setCouponCode(event.target.value)}
+                placeholder="Ex.: BEMVINDO10"
+                maxLength={30}
+              />
+              <small>O desconto é validado e aplicado ao confirmar o pedido.</small>
+            </div>
 
             <dl className={styles.totals}>
               <div>

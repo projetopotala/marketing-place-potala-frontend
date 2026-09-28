@@ -116,6 +116,12 @@ export default function CheckoutSuccessPage() {
               <dt>Subtotal</dt>
               <dd>{formatPrice(order.subtotal)}</dd>
             </div>
+            {order.discount > 0 ? (
+              <div>
+                <dt>Desconto</dt>
+                <dd>-{formatPrice(order.discount)}</dd>
+              </div>
+            ) : null}
             <div>
               <dt>Entrega ({order.shippingLabel})</dt>
               <dd>{formatPrice(order.shippingCost)}</dd>
