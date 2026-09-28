@@ -88,10 +88,9 @@ export async function getProductRatingSummary(
 
 /**
  * GET /public/reviews/sellers/:id/rating-summary — mesma lógica acima.
- * Sem consumidor ainda: `/vendedor/[slug]` continua 100% sobre dado mock
- * (createAdminSeed, ver o próprio page.tsx da rota) — ligar essa página a
- * dado real é um passo separado, maior, fora do escopo da Fase B. Esta
- * função já fica pronta pra quando isso acontecer.
+ * Consumido por `/vendedor/[slug]` (vitrine pública real, ver
+ * status-migracao-microservicos.md) — a nota exibida ali é este agregado,
+ * não `Seller.ratingAverage` (sellers-service), que nunca é escrito.
  */
 export async function getSellerRatingSummary(
   sellerId: string,

@@ -36,6 +36,7 @@ export interface PublicProductVariant {
 /** Mirrors catalog-service's Product model as returned by GET /public/products(/:id) — ACTIVE only, every field the backend actually has (no rating/reviews/seller — those don't exist in this backend, see the mapper below). */
 export interface PublicProduct {
   id: string;
+  sellerId: string;
   title: string;
   slug: string;
   description: string;
@@ -83,6 +84,7 @@ export interface ListPublicProductsParams {
   limit?: number;
   cursor?: string | null;
   categoryId?: string;
+  sellerId?: string;
   q?: string;
 }
 
@@ -105,6 +107,7 @@ export async function listPublicProducts(
   if (params.limit) query.set("limit", String(params.limit));
   if (params.cursor) query.set("cursor", params.cursor);
   if (params.categoryId) query.set("categoryId", params.categoryId);
+  if (params.sellerId) query.set("sellerId", params.sellerId);
   if (params.q) query.set("q", params.q);
   const qs = query.toString();
   try {

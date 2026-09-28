@@ -18,9 +18,8 @@ import styles from "@/components/seller/seller.module.css";
  * avaliação real nenhuma).
  *
  * `getSellerRatingSummary` já existia no client (`lib/api/reviews.ts`,
- * escrito na Fase B, sem consumidor até agora — a nota da própria loja
- * pra `/vendedor/[slug]` continua fora de escopo, ver nota na Fase B do
- * status doc). `listMySellerReviews` é novo, contra o endpoint
+ * escrito na Fase B) — hoje também consumido por `/vendedor/[slug]`
+ * (vitrine pública real). `listMySellerReviews` é novo, contra o endpoint
  * `GET /seller/reviews` criado nesta sessão.
  *
  * Sem nome do produto na tabela: `Review` só guarda `productId` (snapshot,

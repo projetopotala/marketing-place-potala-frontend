@@ -13,6 +13,8 @@ interface SellerStorefrontViewProps {
   sellerName: string;
   sellerDescription: string;
   sellerRating: number;
+  /** 0 quando a loja ainda não tem nenhuma avaliação real — distingue "sem avaliação" de "nota baixa". */
+  sellerReviewCount: number;
   coverImageSrc: string;
   categories: string[];
   products: Product[];
@@ -25,6 +27,7 @@ export function SellerStorefrontView({
   sellerName,
   sellerDescription,
   sellerRating,
+  sellerReviewCount,
   coverImageSrc,
   categories,
   products,
@@ -75,7 +78,10 @@ export function SellerStorefrontView({
           <h1 className={styles.title}>{sellerName}</h1>
           <p className={styles.lead}>{sellerDescription}</p>
           <p className={styles.rating}>
-            Avaliação {sellerRating.toFixed(1)} · {products.length} produtos
+            {sellerReviewCount > 0
+              ? `Avaliação ${sellerRating.toFixed(1)} (${sellerReviewCount})`
+              : "Sem avaliações ainda"}{" "}
+            · {products.length} produtos
           </p>
         </div>
       </section>

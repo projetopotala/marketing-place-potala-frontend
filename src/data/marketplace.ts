@@ -41,7 +41,9 @@ export const NAV_CATEGORIES: NavCategory[] = [
     href: category.href,
   })),
   { id: "novidades", label: "Novidades", href: "/novidades" },
-  { id: "ofertas", label: "Ofertas", href: "/ofertas" },
+  // "Ofertas" removido da navegação nesta sessão — ver
+  // src/app/(storefront)/ofertas/page.tsx pro porquê (sem preço
+  // promocional real no backend).
 ];
 
 export const PRODUCTS: Product[] = [

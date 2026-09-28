@@ -12,10 +12,14 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { FEATURED_CATEGORIES, PRODUCTS } from "@/data/marketplace";
 import { catalogHref } from "@/features/catalog/selectors";
 import { textIncludes } from "@/lib/normalizeText";
 import { SearchIcon } from "@/components/storefront/icons";
+import {
+  listPublicCategories,
+  listPublicProducts,
+  type PublicCategory,
+} from "@/lib/api/catalog-public";
 
 interface StoreSearchHit {
   id: string;
@@ -25,50 +29,18 @@ interface StoreSearchHit {
   group: "Produtos" | "Categorias" | "Ações";
 }
 
-function searchStorefront(query: string): StoreSearchHit[] {
-  const q = query.trim();
-  if (!q) return [];
-
-  const products = PRODUCTS.filter(
-    (product) =>
-      textIncludes(product.name, q) ||
-      textIncludes(product.category, q) ||
-      textIncludes(product.description ?? "", q) ||
-      textIncludes(product.slug, q),
-  )
-    .slice(0, 8)
-    .map((product) => ({
-      id: product.id,
-      label: product.name,
-      meta: product.category,
-      href: `/produto/${product.slug}`,
-      group: "Produtos" as const,
-    }));
-
-  const categories = FEATURED_CATEGORIES.filter((category) =>
-    textIncludes(category.name, q),
-  )
-    .slice(0, 5)
-    .map((category) => ({
-      id: category.id,
-      label: category.name,
-      meta: "Categoria",
-      href: category.href,
-      group: "Categorias" as const,
-    }));
-
-  const actions: StoreSearchHit[] = [
-    {
-      id: "see-all-results",
-      label: `Ver todos os resultados para “${q}”`,
-      meta: "Catálogo",
-      href: catalogHref({ q }),
-      group: "Ações",
-    },
-  ];
-
-  return [...products, ...categories, ...actions];
-}
+/**
+ * Rewritten this session (vitrine pública real, ver
+ * status-migracao-microservicos.md) — antes filtrava só o array mock
+ * `PRODUCTS`/`FEATURED_CATEGORIES` (`data/marketplace.ts`) em memória, sem
+ * nenhuma chamada de rede. Categorias reais são poucas e mudam raramente
+ * (buscadas uma vez ao abrir a busca, filtradas no cliente); produtos
+ * reais podem ser muitos, então a busca por título já usa o filtro `q` do
+ * próprio backend (`GET /public/products?q=`, mesmo endpoint que
+ * `/catalogo` já usa) em vez de carregar tudo pra filtrar depois — só que
+ * agora com debounce, pra não disparar uma requisição a cada tecla.
+ */
+const SEARCH_DEBOUNCE_MS = 250;
 
 export function StorefrontSearch() {
   const router = useRouter();
@@ -76,12 +48,75 @@ export function StorefrontSearch() {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [categories, setCategories] = useState<PublicCategory[]>([]);
+  const [productHits, setProductHits] = useState<StoreSearchHit[]>([]);
+  const requestIdRef = useRef(0);
 
-  const results = useMemo(() => searchStorefront(query), [query]);
+  // Categorias reais buscadas uma vez, ao abrir a busca pela primeira vez —
+  // não precisam ser re-buscadas a cada tecla, filtro é local (textIncludes).
+  useEffect(() => {
+    if (!open || categories.length > 0) return;
+    listPublicCategories().then(setCategories);
+  }, [open, categories.length]);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setProductHits([]);
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+    const timer = setTimeout(() => {
+      listPublicProducts({ q, limit: 8 }).then((page) => {
+        if (requestIdRef.current !== requestId) return; // resposta obsoleta, query já mudou
+        setProductHits(
+          page.items.map((product) => ({
+            id: product.id,
+            label: product.title,
+            meta: product.category.name,
+            href: `/produto/${product.id}`,
+            group: "Produtos" as const,
+          })),
+        );
+      });
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const results = useMemo<StoreSearchHit[]>(() => {
+    const q = query.trim();
+    if (!q) return [];
+
+    const categoryHits: StoreSearchHit[] = categories
+      .filter((category) => textIncludes(category.name, q))
+      .slice(0, 5)
+      .map((category) => ({
+        id: category.id,
+        label: category.name,
+        meta: "Categoria",
+        href: `/categoria/${category.slug}`,
+        group: "Categorias" as const,
+      }));
+
+    const actionHits: StoreSearchHit[] = [
+      {
+        id: "see-all-results",
+        label: `Ver todos os resultados para “${q}”`,
+        meta: "Catálogo",
+        href: catalogHref({ q }),
+        group: "Ações",
+      },
+    ];
+
+    return [...productHits, ...categoryHits, ...actionHits];
+  }, [categories, productHits, query]);
+
   const hasQuery = query.trim().length > 0;
-  const productHits = results.filter((item) => item.group === "Produtos");
-  const categoryHits = results.filter((item) => item.group === "Categorias");
-  const actionHits = results.filter((item) => item.group === "Ações");
+  const productResultHits = results.filter((item) => item.group === "Produtos");
+  const categoryResultHits = results.filter((item) => item.group === "Categorias");
+  const actionResultHits = results.filter((item) => item.group === "Ações");
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -161,9 +196,9 @@ export function StorefrontSearch() {
                 : "Digite para buscar produtos, cursos e categorias."}
             </CommandEmpty>
 
-            {productHits.length > 0 ? (
+            {productResultHits.length > 0 ? (
               <CommandGroup heading="Produtos">
-                {productHits.map((item) => (
+                {productResultHits.map((item) => (
                   <CommandItem
                     key={`product-${item.id}`}
                     value={`product:${item.id}:${item.label}`}
@@ -181,9 +216,9 @@ export function StorefrontSearch() {
               </CommandGroup>
             ) : null}
 
-            {categoryHits.length > 0 ? (
+            {categoryResultHits.length > 0 ? (
               <CommandGroup heading="Categorias">
-                {categoryHits.map((item) => (
+                {categoryResultHits.map((item) => (
                   <CommandItem
                     key={`category-${item.id}`}
                     value={`category:${item.id}:${item.label}`}
@@ -200,9 +235,9 @@ export function StorefrontSearch() {
               </CommandGroup>
             ) : null}
 
-            {hasQuery && actionHits.length > 0 ? (
+            {hasQuery && actionResultHits.length > 0 ? (
               <CommandGroup heading="Catálogo">
-                {actionHits.map((item) => (
+                {actionResultHits.map((item) => (
                   <CommandItem
                     key={`action-${item.id}`}
                     value={`action:${item.id}:${item.label}`}
