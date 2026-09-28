@@ -108,3 +108,14 @@ export async function listActiveCouponsForSeller(): Promise<Coupon[]> {
   const result = await apiFetch<Coupon[]>("/seller/coupons");
   return result ?? [];
 }
+
+/**
+ * GET /orders/coupons -- mesma leitura de listActiveCouponsForSeller
+ * acima, só que pelo lado do cliente (orders-service, novo nesta sessão).
+ * Cupom continua marketplace-wide (sem sellerId), então a lista é a mesma
+ * pra qualquer cliente autenticado.
+ */
+export async function listActiveCouponsForCustomer(): Promise<Coupon[]> {
+  const result = await apiFetch<Coupon[]>("/orders/coupons");
+  return result ?? [];
+}

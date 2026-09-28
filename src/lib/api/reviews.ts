@@ -132,6 +132,27 @@ export async function listMySellerReviews(params?: {
   return result ?? EMPTY_REVIEWS_PAGE;
 }
 
+/**
+ * GET /orders/reviews — avaliações enviadas pelo cliente autenticado
+ * (todas as lojas), paginado por cursor. Novo esta sessão, backs the
+ * customer "Avaliações" panel (`/minha-conta/avaliacoes`). Mesmo
+ * raciocínio de listMySellerReviews acima: autenticado, não degrada em
+ * silêncio.
+ */
+export async function listMyReviews(params?: {
+  limit?: number;
+  cursor?: string | null;
+}): Promise<Paginated<ReviewResponse>> {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.cursor) query.set("cursor", params.cursor);
+  const qs = query.toString();
+  const result = await apiFetch<Paginated<ReviewResponse>>(
+    `/orders/reviews${qs ? `?${qs}` : ""}`,
+  );
+  return result ?? EMPTY_REVIEWS_PAGE;
+}
+
 export interface CreateReviewInput {
   rating: number;
   comment?: string;

@@ -1,161 +1,137 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { AccountChrome } from "@/components/account/AccountChrome";
-import { useAccountData } from "@/features/account/AccountDataContext";
+import { ApiError } from "@/lib/api/client";
+import { listMyReviews, type ReviewResponse } from "@/lib/api/reviews";
 
+const PAGE_SIZE = 10;
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+function stars(rating: number): string {
+  return "★".repeat(rating) + "☆".repeat(5 - rating);
+}
+
+/**
+ * Real via GET /orders/reviews (orders-service, novo nesta sessão) --
+ * substitui o mock antigo (`useAccountData`, `db.reviews`, `submitReview`
+ * em localStorage, com seções "Pendentes"/"Publicadas" e edição de
+ * avaliação já publicada).
+ *
+ * Escopo confirmado com o Arthur: só lista de avaliações já enviadas,
+ * somente leitura, mesmo padrão de SellerReviewsView.tsx (painel do
+ * vendedor). Duas funções do mock saem, sem equivalente real: "editar
+ * avaliação publicada" (não existe endpoint de edição de Review -- só
+ * criação) e a seção "Pendentes" com formulário inline (avaliar um pedido
+ * novo já acontece no detalhe do pedido, `/minha-conta/pedidos/[id]`,
+ * `OrderItemReviewForm`, construído na Fase B -- juntar tudo aqui de novo
+ * duplicaria a mesma busca de itens elegíveis sem ganho real, mesmo
+ * raciocínio já usado em `/minha-conta/devolucoes`).
+ *
+ * Sem nome do produto na tabela, mesma limitação documentada em
+ * SellerReviewsView.tsx: Review só guarda productId (snapshot, sem FK
+ * cross-schema), resolver o título exigiria uma chamada por linha a
+ * catalog-service.
+ */
 export default function AccountReviewsPage() {
-  const { db, isHydrated, submitReview } = useAccountData();
-  const [drafts, setDrafts] = useState<
-    Record<string, { rating: number; comment: string }>
-  >({});
-  const [status, setStatus] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<ReviewResponse[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
 
-  const pending = db?.reviews.filter((review) => review.status === "pending") ?? [];
-  const published =
-    db?.reviews.filter((review) => review.status === "published") ?? [];
-
-  function handleSubmit(event: FormEvent, id: string) {
-    event.preventDefault();
-    const draft = drafts[id] ?? { rating: 5, comment: "" };
-    if (draft.rating < 1 || draft.rating > 5) {
-      setStatus("Selecione de 1 a 5 estrelas.");
-      return;
+  const loadPage = useCallback(async (cursor: string | null) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const page = await listMyReviews({ limit: PAGE_SIZE, cursor });
+      setReviews(page.items);
+      setHasNextPage(page.pageInfo.hasNextPage);
+    } catch (err) {
+      setReviews(null);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível carregar suas avaliações.",
+      );
+    } finally {
+      setIsLoading(false);
     }
-    submitReview({ id, rating: draft.rating, comment: draft.comment });
-    setStatus("Avaliação salva (demonstrativo).");
+  }, []);
+
+  useEffect(() => {
+    void loadPage(cursorStack[pageIndex] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIndex, loadPage]);
+
+  function goNext() {
+    if (!hasNextPage || !reviews || reviews.length === 0) return;
+    const nextCursor = reviews[reviews.length - 1]?.id ?? null;
+    setCursorStack((stack) => {
+      const next = stack.slice(0, pageIndex + 1);
+      next.push(nextCursor);
+      return next;
+    });
+    setPageIndex((index) => index + 1);
+  }
+
+  function goPrevious() {
+    if (pageIndex === 0) return;
+    setPageIndex((index) => index - 1);
   }
 
   return (
     <AccountChrome
       title="Avaliações"
-      lead="Pendentes e publicadas neste navegador."
+      lead="Avaliações que você já enviou."
       breadcrumbCurrent="Avaliações"
     >
-      {!isHydrated || !db ? (
-        <p role="status">Carregando…</p>
-      ) : (
-        <>
-          <section>
-            <h2>Pendentes</h2>
-            {pending.length === 0 ? (
-              <p>Nenhuma avaliação pendente.</p>
-            ) : (
-              pending.map((review) => {
-                const draft = drafts[review.id] ?? {
-                  rating: 5,
-                  comment: "",
-                };
-                return (
-                  <form
-                    key={review.id}
-                    onSubmit={(event) => handleSubmit(event, review.id)}
-                    style={{
-                      display: "grid",
-                      gap: 8,
-                      marginBottom: 16,
-                      border: "1px solid var(--potala-border)",
-                      borderRadius: 12,
-                      padding: 12,
-                    }}
-                  >
-                    <p>{review.productName}</p>
-                    <fieldset>
-                      <legend>Nota</legend>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <label
-                          key={star}
-                          style={{
-                            marginRight: 8,
-                            display: "inline-flex",
-                            gap: 4,
-                            alignItems: "center",
-                            minHeight: 44,
-                          }}
-                        >
-                          <input
-                            type="radio"
-                            name={`rating-${review.id}`}
-                            checked={draft.rating === star}
-                            onChange={() =>
-                              setDrafts((current) => ({
-                                ...current,
-                                [review.id]: { ...draft, rating: star },
-                              }))
-                            }
-                          />
-                          {star}
-                        </label>
-                      ))}
-                    </fieldset>
-                    <label htmlFor={`c-${review.id}`}>Comentário</label>
-                    <textarea
-                      id={`c-${review.id}`}
-                      value={draft.comment}
-                      onChange={(event) =>
-                        setDrafts((current) => ({
-                          ...current,
-                          [review.id]: {
-                            ...draft,
-                            comment: event.target.value,
-                          },
-                        }))
-                      }
-                      style={{ minHeight: 90 }}
-                    />
-                    <button type="submit" style={{ minHeight: 44 }}>
-                      Enviar avaliação
-                    </button>
-                  </form>
-                );
-              })
-            )}
-          </section>
+      <p>
+        Para avaliar um pedido, acesse{" "}
+        <Link href="/minha-conta/pedidos">Meus Pedidos</Link> e abra o
+        pedido desejado -- o formulário aparece nos itens já confirmados
+        pelo vendedor.
+      </p>
 
-          <section>
-            <h2>Publicadas</h2>
-            {published.length === 0 ? (
-              <p>Nenhuma avaliação publicada.</p>
-            ) : (
-              published.map((review) => (
-                <form
-                  key={review.id}
-                  onSubmit={(event) => handleSubmit(event, review.id)}
-                  style={{ marginBottom: 16 }}
-                >
-                  <p>
-                    {review.productName} · {review.rating}/5
-                  </p>
-                  <label htmlFor={`e-${review.id}`}>Editar comentário</label>
-                  <textarea
-                    id={`e-${review.id}`}
-                    defaultValue={review.comment}
-                    onChange={(event) =>
-                      setDrafts((current) => ({
-                        ...current,
-                        [review.id]: {
-                          rating: review.rating,
-                          comment: event.target.value,
-                        },
-                      }))
-                    }
-                    style={{ width: "100%", minHeight: 80 }}
-                  />
-                  <button type="submit" style={{ minHeight: 44, marginTop: 8 }}>
-                    Atualizar
-                  </button>
-                </form>
-              ))
-            )}
-          </section>
+      <section style={{ marginTop: 24 }}>
+        <h2>Enviadas</h2>
+        {isLoading ? (
+          <p role="status">Carregando…</p>
+        ) : error ? (
+          <p role="alert" style={{ color: "var(--potala-danger, #c95c57)" }}>
+            {error}
+          </p>
+        ) : !reviews || reviews.length === 0 ? (
+          <p>Nenhuma avaliação enviada ainda.</p>
+        ) : (
+          <ul>
+            {reviews.map((review) => (
+              <li key={review.id} style={{ marginBottom: 8 }}>
+                <span aria-label={`${review.rating} de 5`}>{stars(review.rating)}</span>
+                {" · "}
+                {review.comment ?? "Sem comentário"}
+                {" · "}
+                {formatDate(review.createdAt)}
+              </li>
+            ))}
+          </ul>
+        )}
 
-          {status ? (
-            <p role="status" aria-live="polite">
-              {status}
-            </p>
-          ) : null}
-        </>
-      )}
+        <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
+          <button type="button" disabled={pageIndex === 0 || isLoading} onClick={goPrevious}>
+            Anterior
+          </button>
+          <span>Página {pageIndex + 1}</span>
+          <button type="button" disabled={!hasNextPage || isLoading} onClick={goNext}>
+            Próxima
+          </button>
+        </div>
+      </section>
     </AccountChrome>
   );
 }
