@@ -1,440 +1,242 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useAdminData } from "@/features/admin/hooks/useAdminData";
-import { PRODUCT_STATUS_LABEL } from "@/features/admin/domain/status";
-import type { AdminProduct, ProductStatus } from "@/features/admin/domain/types";
-import { formatMoney } from "@/features/admin/utils/currency";
-import { downloadCsv, toCsv } from "@/features/admin/utils/csv";
-import { includesQuery, paginate, sortBy } from "@/features/admin/utils/filters";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ADMIN_PRODUCT_STATUS_LABEL,
+  activateAdminProduct,
+  deactivateAdminProduct,
+  listAdminProducts,
+  listAdminSellers,
+  totalAdminProductStock,
+  type AdminProduct,
+  type AdminProductStatus,
+  type AdminSeller,
+} from "@/lib/api/admin";
+import { ApiError } from "@/lib/api/client";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
-import {
-  AdminMetricCard,
-  AdminMetricsRow,
-} from "@/components/admin/shared/AdminMetricCard";
-import {
-  AdminDataTable,
-  sharedStyles,
-} from "@/components/admin/shared/AdminDataTable";
-import {
-  AdminFilterBar,
-  AdminPagination,
-  AdminStatusBadge,
-  Field,
-} from "@/components/admin/shared/AdminStatusBadge";
-import { AdminModal } from "@/components/admin/shared/AdminModal";
+import { AdminDataTable, sharedStyles } from "@/components/admin/shared/AdminDataTable";
+import { AdminStatusBadge, AdminEmptyState } from "@/components/admin/shared/AdminStatusBadge";
+import { AdminConfirmDialog } from "@/components/admin/shared/AdminModal";
 import { useAdminToast } from "@/components/admin/shared/AdminToastProvider";
-import moduleStyles from "./modules.module.css";
 
-function productTone(status: ProductStatus) {
-  if (status === "active") return "success" as const;
-  if (status === "review") return "warning" as const;
-  if (status === "rejected") return "danger" as const;
+/**
+ * Real via GET/PATCH /admin/products (catalog-service) -- ver o comentário
+ * completo em lib/api/admin.ts sobre o que foi cortado do mock antigo
+ * (busca, filtro, ordenar, CSV, seleção em lote, Aprovar/Rejeitar,
+ * Destacar, Editar, tela de detalhe) e por quê.
+ */
+
+const PAGE_SIZE = 10;
+const SELLERS_LIMIT = 100;
+
+function productTone(status: AdminProductStatus) {
+  if (status === "ACTIVE") return "success" as const;
+  if (status === "REVIEW") return "warning" as const;
+  if (status === "REJECTED") return "danger" as const;
   return "muted" as const;
 }
 
+function formatMoney(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
 export function ProductsView() {
-  const { db, isHydrated, repo, refresh } = useAdminData();
   const toast = useAdminToast();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<ProductStatus | "all">("all");
-  const [sortKey, setSortKey] = useState<"title" | "price" | "stock">("title");
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [rejectId, setRejectId] = useState<string | null>(null);
-  const [rejectNote, setRejectNote] = useState("");
-  const [editProduct, setEditProduct] = useState<AdminProduct | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editPrice, setEditPrice] = useState("");
-  const [editStock, setEditStock] = useState("");
+  const [sellers, setSellers] = useState<AdminSeller[] | null>(null);
+  const [products, setProducts] = useState<AdminProduct[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [statusTarget, setStatusTarget] = useState<AdminProduct | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listAdminSellers({ limit: SELLERS_LIMIT })
+      .then((page) => {
+        if (!cancelled) setSellers(page.items);
+      })
+      .catch(() => {
+        // Nome da loja é só um complemento visual -- se essa chamada falhar,
+        // a tabela ainda funciona mostrando o sellerId cru no lugar do nome.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadPage = useCallback(async (cursor: string | null) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const page = await listAdminProducts({ limit: PAGE_SIZE, cursor });
+      setProducts(page.items);
+      setHasNextPage(page.pageInfo.hasNextPage);
+    } catch (err) {
+      setProducts(null);
+      setError(
+        err instanceof ApiError ? err.message : "Não foi possível carregar os produtos.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPage(cursorStack[pageIndex] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIndex, loadPage]);
+
+  function goNext() {
+    if (!hasNextPage || !products || products.length === 0) return;
+    const nextCursor = products[products.length - 1]?.id ?? null;
+    setCursorStack((stack) => {
+      const next = stack.slice(0, pageIndex + 1);
+      next.push(nextCursor);
+      return next;
+    });
+    setPageIndex((index) => index + 1);
+  }
+
+  function goPrevious() {
+    if (pageIndex === 0) return;
+    setPageIndex((index) => index - 1);
+  }
 
   const sellerName = useMemo(() => {
-    const map = new Map(db.sellers.map((s) => [s.id, s.name]));
+    const map = new Map((sellers ?? []).map((s) => [s.id, s.tradeName]));
     return (id: string) => map.get(id) ?? id;
-  }, [db.sellers]);
+  }, [sellers]);
 
-  const filtered = useMemo(() => {
-    const list = db.products.filter((product) => {
-      if (status !== "all" && product.status !== status) return false;
-      return includesQuery(
-        `${product.title} ${sellerName(product.sellerId)}`,
-        query,
+  function applyResult(id: string, updated: AdminProduct) {
+    setProducts((current) =>
+      current ? current.map((p) => (p.id === id ? updated : p)) : current,
+    );
+  }
+
+  async function confirmStatusChange() {
+    if (!statusTarget) return;
+    setPendingActionId(statusTarget.id);
+    try {
+      const result =
+        statusTarget.status === "ACTIVE"
+          ? await deactivateAdminProduct(statusTarget.id)
+          : await activateAdminProduct(statusTarget.id);
+      applyResult(statusTarget.id, result);
+      toast.push(result.status === "ACTIVE" ? "Produto ativado" : "Produto desativado");
+      setStatusTarget(null);
+    } catch (err) {
+      toast.push(
+        err instanceof ApiError ? err.message : "Não foi possível concluir a ação.",
+        "error",
       );
-    });
-    if (sortKey === "price") return sortBy(list, (p) => p.priceCents, "desc");
-    if (sortKey === "stock") return sortBy(list, (p) => p.stock, "desc");
-    return sortBy(list, (p) => p.title, "asc");
-  }, [db.products, query, status, sortKey, sellerName]);
-
-  const paged = paginate(filtered, page, 8);
-
-  const metrics = useMemo(() => {
-    return {
-      total: db.products.length,
-      review: db.products.filter((p) => p.status === "review").length,
-      active: db.products.filter((p) => p.status === "active").length,
-      featured: db.products.filter((p) => p.featured).length,
-    };
-  }, [db.products]);
-
-  function toggleSelect(id: string) {
-    setSelected((current) =>
-      current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
-    );
-  }
-
-  function bulkActivate() {
-    let next = db;
-    for (const id of selected) {
-      repo.setDb(next);
-      next = repo.changeProductStatus(id, "active");
+    } finally {
+      setPendingActionId(null);
     }
-    refresh(next);
-    setSelected([]);
-    toast.push("Produtos ativados em lote");
-  }
-
-  function exportCsv() {
-    downloadCsv(
-      "produtos.csv",
-      toCsv(
-        ["Título", "Vendedor", "Status", "Preço", "Estoque", "Destaque"],
-        filtered.map((p) => [
-          p.title,
-          sellerName(p.sellerId),
-          PRODUCT_STATUS_LABEL[p.status],
-          formatMoney(p.priceCents),
-          String(p.stock),
-          p.featured ? "Sim" : "Não",
-        ]),
-      ),
-    );
-    toast.push("CSV exportado");
-  }
-
-  if (!isHydrated) {
-    return <div className={sharedStyles.skeleton} aria-busy="true" />;
   }
 
   return (
     <div className={sharedStyles.stack}>
       <AdminPageHeader
         title="Produtos"
-        description="Moderação, estoque, preço e destaque dos itens do catálogo."
-        actions={
-          <>
-            <button type="button" className={sharedStyles.btnSecondary} onClick={exportCsv}>
-              Exportar CSV
-            </button>
-            <button
-              type="button"
-              className={sharedStyles.btn}
-              disabled={selected.length === 0}
-              onClick={bulkActivate}
-            >
-              Ativar selecionados ({selected.length})
-            </button>
-          </>
-        }
+        description="Todos os produtos de todas as lojas, direto do catalog-service."
       />
 
-      <AdminMetricsRow>
-        <AdminMetricCard label="Total" value={String(metrics.total)} />
-        <AdminMetricCard label="Em revisão" value={String(metrics.review)} />
-        <AdminMetricCard label="Ativos" value={String(metrics.active)} />
-        <AdminMetricCard label="Em destaque" value={String(metrics.featured)} />
-      </AdminMetricsRow>
-
-      <AdminFilterBar>
-        <Field label="Buscar">
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Título ou vendedor…"
-          />
-        </Field>
-        <Field label="Status">
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value as ProductStatus | "all");
-              setPage(1);
-            }}
-          >
-            <option value="all">Todos</option>
-            {(Object.keys(PRODUCT_STATUS_LABEL) as ProductStatus[]).map((key) => (
-              <option key={key} value={key}>
-                {PRODUCT_STATUS_LABEL[key]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Ordenar">
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
-          >
-            <option value="title">Título</option>
-            <option value="price">Preço</option>
-            <option value="stock">Estoque</option>
-          </select>
-        </Field>
-      </AdminFilterBar>
-
-      <AdminDataTable
-        caption="Lista de produtos"
-        rows={paged.items}
-        columns={[
-          {
-            key: "select",
-            header: "",
-            render: (row) => (
-              <label className={moduleStyles.checkboxRow}>
-                <input
-                  type="checkbox"
-                  checked={selected.includes(row.id)}
-                  onChange={() => toggleSelect(row.id)}
-                  aria-label={`Selecionar ${row.title}`}
+      {isLoading ? (
+        <p role="status">Carregando produtos…</p>
+      ) : error ? (
+        <AdminEmptyState title="Não foi possível carregar os produtos" description={error} />
+      ) : (
+        <AdminDataTable
+          caption="Lista de produtos"
+          rows={products ?? []}
+          columns={[
+            { key: "title", header: "Produto", render: (row) => row.title },
+            { key: "seller", header: "Vendedor", render: (row) => sellerName(row.sellerId) },
+            {
+              key: "status",
+              header: "Status",
+              render: (row) => (
+                <AdminStatusBadge
+                  label={ADMIN_PRODUCT_STATUS_LABEL[row.status]}
+                  tone={productTone(row.status)}
                 />
-              </label>
-            ),
-          },
-          {
-            key: "title",
-            header: "Produto",
-            render: (row) => (
-              <Link href={`/admin/produtos/${row.id}`} className={sharedStyles.linkBtn}>
-                {row.title}
-              </Link>
-            ),
-          },
-          {
-            key: "seller",
-            header: "Vendedor",
-            render: (row) => sellerName(row.sellerId),
-          },
-          {
-            key: "status",
-            header: "Status",
-            render: (row) => (
+              ),
+            },
+            { key: "price", header: "Preço", render: (row) => formatMoney(row.priceCents) },
+            {
+              key: "stock",
+              header: "Estoque",
+              render: (row) => String(totalAdminProductStock(row)),
+            },
+            {
+              key: "actions",
+              header: "Ações",
+              render: (row) =>
+                row.status === "ACTIVE" || row.status === "INACTIVE" ? (
+                  <button
+                    type="button"
+                    className={sharedStyles.linkBtn}
+                    disabled={pendingActionId === row.id}
+                    onClick={() => setStatusTarget(row)}
+                  >
+                    {row.status === "ACTIVE" ? "Desativar" : "Ativar"}
+                  </button>
+                ) : (
+                  <span>—</span>
+                ),
+            },
+          ]}
+          mobileCard={(row) => (
+            <>
+              <strong>{row.title}</strong>
+              <span>{sellerName(row.sellerId)}</span>
               <AdminStatusBadge
-                label={PRODUCT_STATUS_LABEL[row.status]}
+                label={ADMIN_PRODUCT_STATUS_LABEL[row.status]}
                 tone={productTone(row.status)}
               />
-            ),
-          },
-          {
-            key: "price",
-            header: "Preço",
-            render: (row) => formatMoney(row.priceCents),
-          },
-          { key: "stock", header: "Estoque", render: (row) => String(row.stock) },
-          {
-            key: "actions",
-            header: "Ações",
-            render: (row) => (
-              <div className={sharedStyles.rowActions}>
-                {row.status === "review" ? (
-                  <>
-                    <button
-                      type="button"
-                      className={sharedStyles.linkBtn}
-                      onClick={() => {
-                        refresh(repo.changeProductStatus(row.id, "active"));
-                        toast.push("Produto aprovado");
-                      }}
-                    >
-                      Aprovar
-                    </button>
-                    <button
-                      type="button"
-                      className={sharedStyles.linkBtn}
-                      onClick={() => {
-                        setRejectId(row.id);
-                        setRejectNote("");
-                      }}
-                    >
-                      Rejeitar
-                    </button>
-                  </>
-                ) : null}
-                {row.status === "active" ? (
-                  <button
-                    type="button"
-                    className={sharedStyles.linkBtn}
-                    onClick={() => {
-                      refresh(repo.changeProductStatus(row.id, "inactive"));
-                      toast.push("Produto desativado");
-                    }}
-                  >
-                    Desativar
-                  </button>
-                ) : null}
-                {row.status === "inactive" || row.status === "rejected" ? (
-                  <button
-                    type="button"
-                    className={sharedStyles.linkBtn}
-                    onClick={() => {
-                      refresh(repo.changeProductStatus(row.id, "active"));
-                      toast.push("Produto ativado");
-                    }}
-                  >
-                    Ativar
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className={sharedStyles.linkBtn}
-                  onClick={() => {
-                    refresh(
-                      repo.updateProduct(row.id, { featured: !row.featured }),
-                    );
-                    toast.push(row.featured ? "Destaque removido" : "Produto em destaque");
-                  }}
-                >
-                  {row.featured ? "Remover destaque" : "Destacar"}
-                </button>
-                <button
-                  type="button"
-                  className={sharedStyles.linkBtn}
-                  onClick={() => {
-                    setEditProduct(row);
-                    setEditTitle(row.title);
-                    setEditPrice(String(row.priceCents / 100));
-                    setEditStock(String(row.stock));
-                  }}
-                >
-                  Editar
-                </button>
-              </div>
-            ),
-          },
-        ]}
-        mobileCard={(row) => (
-          <>
-            <label className={moduleStyles.checkboxRow}>
-              <input
-                type="checkbox"
-                checked={selected.includes(row.id)}
-                onChange={() => toggleSelect(row.id)}
-              />
-              <Link href={`/admin/produtos/${row.id}`} className={sharedStyles.linkBtn}>
-                {row.title}
-              </Link>
-            </label>
-            <span>{sellerName(row.sellerId)}</span>
-            <AdminStatusBadge
-              label={PRODUCT_STATUS_LABEL[row.status]}
-              tone={productTone(row.status)}
-            />
-            <span>
-              {formatMoney(row.priceCents)} · estoque {row.stock}
-            </span>
-          </>
-        )}
+              <span>
+                {formatMoney(row.priceCents)} · estoque {totalAdminProductStock(row)}
+              </span>
+            </>
+          )}
+        />
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
+        <button
+          type="button"
+          className={sharedStyles.btnGhost}
+          disabled={pageIndex === 0 || isLoading}
+          onClick={goPrevious}
+        >
+          Anterior
+        </button>
+        <span>Página {pageIndex + 1}</span>
+        <button
+          type="button"
+          className={sharedStyles.btnGhost}
+          disabled={!hasNextPage || isLoading}
+          onClick={goNext}
+        >
+          Próxima
+        </button>
+      </div>
+
+      <AdminConfirmDialog
+        open={Boolean(statusTarget)}
+        title={statusTarget?.status === "ACTIVE" ? "Desativar produto" : "Ativar produto"}
+        description={`Confirma alterar o status de ${statusTarget?.title ?? ""}?`}
+        confirmLabel="Confirmar"
+        busy={pendingActionId === statusTarget?.id}
+        onConfirm={() => void confirmStatusChange()}
+        onClose={() => setStatusTarget(null)}
       />
-
-      <AdminPagination
-        page={paged.page}
-        pages={paged.pages}
-        total={paged.total}
-        onChange={setPage}
-      />
-
-      <AdminModal
-        open={Boolean(rejectId)}
-        title="Rejeitar produto"
-        onClose={() => setRejectId(null)}
-        actions={
-          <>
-            <button
-              type="button"
-              className={sharedStyles.btnGhost}
-              onClick={() => setRejectId(null)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className={sharedStyles.btnDanger}
-              onClick={() => {
-                if (!rejectId) return;
-                refresh(repo.changeProductStatus(rejectId, "rejected", rejectNote));
-                setRejectId(null);
-                toast.push("Produto rejeitado");
-              }}
-            >
-              Rejeitar
-            </button>
-          </>
-        }
-      >
-        <Field label="Motivo">
-          <textarea
-            value={rejectNote}
-            onChange={(e) => setRejectNote(e.target.value)}
-            placeholder="Descreva o motivo da rejeição"
-          />
-        </Field>
-      </AdminModal>
-
-      <AdminModal
-        open={Boolean(editProduct)}
-        title="Editar produto"
-        onClose={() => setEditProduct(null)}
-        actions={
-          <>
-            <button
-              type="button"
-              className={sharedStyles.btnGhost}
-              onClick={() => setEditProduct(null)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className={sharedStyles.btn}
-              onClick={() => {
-                if (!editProduct) return;
-                const price = Math.round(Number(editPrice.replace(",", ".")) * 100);
-                const stock = Math.max(0, Math.floor(Number(editStock) || 0));
-                if (!Number.isFinite(price) || price < 0) {
-                  toast.push("Preço inválido", "error");
-                  return;
-                }
-                refresh(
-                  repo.updateProduct(editProduct.id, {
-                    title: editTitle.trim() || editProduct.title,
-                    priceCents: price,
-                    stock,
-                  }),
-                );
-                setEditProduct(null);
-                toast.push("Produto atualizado");
-              }}
-            >
-              Salvar
-            </button>
-          </>
-        }
-      >
-        <div className={sharedStyles.stack}>
-          <Field label="Título">
-            <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-          </Field>
-          <Field label="Preço (R$)">
-            <input value={editPrice} onChange={(e) => setEditPrice(e.target.value)} />
-          </Field>
-          <Field label="Estoque">
-            <input value={editStock} onChange={(e) => setEditStock(e.target.value)} />
-          </Field>
-        </div>
-      </AdminModal>
-
     </div>
   );
 }
