@@ -27,7 +27,6 @@ interface CatalogListingProps {
   currentOrder: ProductSortOrder;
   currentCategoryId?: string;
   lockedCategoryId?: string;
-  lockedCollection?: string;
   showCategoryFilter?: boolean;
   emptyActionHref?: string;
   emptyActionLabel?: string;
@@ -54,7 +53,6 @@ export function CatalogListing({
   currentOrder,
   currentCategoryId,
   lockedCategoryId,
-  lockedCollection,
   showCategoryFilter = true,
   emptyActionHref = "/catalogo",
   emptyActionLabel = "Ver todos os produtos",
@@ -107,7 +105,6 @@ export function CatalogListing({
           currentOrder={currentOrder}
           currentCategoryId={currentCategoryId}
           lockedCategoryId={lockedCategoryId}
-          lockedCollection={lockedCollection}
           showCategoryFilter={showCategoryFilter}
           categories={categories}
         />

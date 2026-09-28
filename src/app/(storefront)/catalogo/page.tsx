@@ -22,12 +22,12 @@ export const metadata = {
  * locally and once the backend is deployed (Fase 4 do mesmo plano), with
  * no client-side loading state needed.
  *
- * "Coleções editoriais" (colecao=mais-procurados) and "ordem=relevancia"
- * as anything but "newest first" don't have a real backing concept in the
- * catalog-service data model, so the "colecao" query param from the old
- * mock version is dropped here — sort by price/name still works (real
- * fields), "relevancia" just means "as returned by the API" (newest
- * first).
+ * "ordem=relevancia" as anything but "newest first" doesn't have a real
+ * backing concept in the catalog-service data model — sort by price/name
+ * still works (real fields), "relevancia" just means "as returned by the
+ * API" (newest first). The old mock's "colecao" (editorial collection)
+ * query param is gone entirely now, not just from this page — see
+ * DiscoverySections.tsx and status-migracao-microservicos.md.
  */
 export default async function CatalogoPage({
   searchParams,

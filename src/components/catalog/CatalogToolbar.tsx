@@ -16,8 +16,6 @@ export interface CatalogToolbarCategory {
 interface CatalogToolbarProps {
   /** When set, category is fixed by the route (not a filter control). */
   lockedCategoryId?: string;
-  /** When set, collection is fixed by the route/query context. */
-  lockedCollection?: string;
   showCategoryFilter?: boolean;
   resultCount: number;
   currentQuery: string;
@@ -40,7 +38,6 @@ const ORDER_OPTIONS: { value: ProductSortOrder; label: string }[] = [
 
 export function CatalogToolbar({
   lockedCategoryId,
-  lockedCollection,
   showCategoryFilter = true,
   resultCount,
   currentQuery,
@@ -60,7 +57,6 @@ export function CatalogToolbar({
     q?: string;
     ordem?: ProductSortOrder;
     categoria?: string;
-    colecao?: string;
   }) {
     const params = buildCatalogSearchParams({
       q: next.q ?? currentQuery,
@@ -70,15 +66,11 @@ export function CatalogToolbar({
         (showCategoryFilter
           ? (next.categoria ?? currentCategoryId)
           : undefined),
-      colecao: lockedCollection ?? next.colecao,
     });
 
     // Locked category pages keep filters on the same path without categoria param.
     if (lockedCategoryId) {
       params.delete("categoria");
-    }
-    if (lockedCollection) {
-      params.set("colecao", lockedCollection);
     }
 
     const qs = params.toString();
@@ -88,11 +80,8 @@ export function CatalogToolbar({
   }
 
   function clearFilters() {
-    const params = new URLSearchParams();
-    if (lockedCollection) params.set("colecao", lockedCollection);
-    const qs = params.toString();
     startTransition(() => {
-      router.push(qs ? `${pathname}?${qs}` : pathname);
+      router.push(pathname);
     });
   }
 
@@ -216,13 +205,7 @@ export function CatalogToolbar({
         <p className="text-sm text-potala-cream/80">
           Resultados para “{currentQuery}”.{" "}
           <Link
-            href={
-              lockedCategoryId
-                ? `/categoria/${lockedCategoryId}`
-                : lockedCollection
-                  ? `/catalogo?colecao=${lockedCollection}`
-                  : "/catalogo"
-            }
+            href={lockedCategoryId ? `/categoria/${lockedCategoryId}` : "/catalogo"}
             className="text-potala-gold underline-offset-2 hover:underline"
           >
             Limpar busca
