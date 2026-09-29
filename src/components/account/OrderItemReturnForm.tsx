@@ -13,7 +13,8 @@ interface OrderItemReturnFormProps {
 /**
  * Devoluções -- mesmo raciocínio de OrderItemReviewForm.tsx: a página de
  * detalhe do pedido decide QUANDO mostrar isto (item de um SellerOrder
- * CONFIRMED ainda sem devolução solicitada), este componente só cuida do
+ * DELIVERED ainda sem devolução solicitada -- corrigido em 29/09, ver
+ * returns.service.ts), este componente só cuida do
  * formulário em si. Sem reembolso/reposição de estoque automáticos --
  * isto só registra o pedido de devolução, um admin decide depois (ver
  * comentário do model Return, orders-service).

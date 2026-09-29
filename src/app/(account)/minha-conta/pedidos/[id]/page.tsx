@@ -30,7 +30,9 @@ import { formatPrice } from "@/data/marketplace";
  * Itens agora são renderizados por SellerOrder, não mais achatados num
  * array só (`sellerOrders.flatMap`) — Fase B do roadmap "estilo Mercado
  * Livre" precisa do `status` de cada SellerOrder pra decidir se mostra o
- * formulário de avaliação (só libera com CONFIRMED, ver
+ * formulário de avaliação/devolução (só libera com DELIVERED -- corrigido
+ * em 29/09, alinhado com a correção equivalente em reviews.service.ts/
+ * returns.service.ts no potala-orders-service; ver
  * roadmap-mercado-livre.md seção 6/8), e isso só existe no nível do
  * SellerOrder, não no item.
  */
@@ -124,7 +126,7 @@ export default function AccountOrderDetailPage() {
                   <li key={item.id} style={{ marginBottom: 12 }}>
                     {item.productTitle} ({item.sku}) — {item.quantity}×{" "}
                     {formatPrice(item.unitPriceCents / 100)}
-                    {sellerOrder.status === "CONFIRMED" ? (
+                    {sellerOrder.status === "DELIVERED" ? (
                       item.review ? (
                         <p
                           style={{
@@ -143,7 +145,7 @@ export default function AccountOrderDetailPage() {
                         />
                       )
                     ) : null}
-                    {sellerOrder.status === "CONFIRMED" ? (
+                    {sellerOrder.status === "DELIVERED" ? (
                       item.returnRequest ? (
                         <p
                           style={{

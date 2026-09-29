@@ -13,8 +13,8 @@ interface OrderItemReviewFormProps {
 /**
  * Fase B do roadmap "estilo Mercado Livre" (ver roadmap-mercado-livre.md
  * no Claude Project). A página de detalhe do pedido decide QUANDO mostrar
- * isto (item de um SellerOrder CONFIRMED ainda sem Review) — este
- * componente só cuida do formulário em si e devolve a avaliação criada
+ * isto (item de um SellerOrder DELIVERED ainda sem Review -- corrigido
+ * em 29/09, ver reviews.service.ts) — este componente só cuida do formulário em si e devolve a avaliação criada
  * pro chamador atualizar o estado local (evita recarregar o pedido inteiro
  * só pra refletir uma avaliação nova).
  */

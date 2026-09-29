@@ -70,8 +70,9 @@ export interface CreateReturnInput {
  * POST /orders/:orderId/items/:itemId/return -- autenticado (CUSTOMER).
  * Ação explícita, mesmo padrão de createReview em reviews.ts: NÃO degrada
  * em silêncio -- 409 se já solicitado para este item, 404 se o item não é
- * deste pedido/cliente, 409 se o SellerOrder ainda não está CONFIRMED
- * (mensagem pronta do backend).
+ * deste pedido/cliente, 409 se o SellerOrder ainda não está DELIVERED
+ * -- corrigido em 29/09, ver returns.service.ts (mensagem pronta do
+ * backend).
  */
 export async function createReturn(
   orderId: string,
