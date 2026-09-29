@@ -1,18 +1,18 @@
 import { apiFetch } from "./client";
 
 /**
- * New this session — perfil rico do cliente em `/minha-conta` (ver
- * status-migracao-microservicos.md no Claude Project, item 3 do
- * Pendente). Client for identity-service's `GET /customers/me`
- * (CustomersController.getMe), acessado pelo gateway como qualquer outra
- * chamada autenticada (`apiFetch` já manda `credentials: "include"`).
+ * Perfil rico do cliente em `/minha-conta` (ver
+ * status-migracao-microservicos.md no Claude Project). Client for
+ * identity-service's `/customers/me*`, acessado pelo gateway como
+ * qualquer outra chamada autenticada (`apiFetch` já manda
+ * `credentials: "include"`).
  *
- * Único endpoint own-profile do cliente hoje — sem POST/PATCH/DELETE em
- * lugar nenhum de identity-service (confirmado em customers.controller.ts:
- * só `@Get('me')`). Isto é, os endereços abaixo são só leitura: não existe
- * como o cliente cadastrar/editar um endereço real pela API ainda —
- * `/minha-conta/enderecos` continua com seu próprio CRUD 100% local
- * (AccountDataContext/localStorage) até esse endpoint existir de verdade.
+ * Atualizado nesta sessão: `/customers/me` ganhou PATCH (nome/telefone) e
+ * `/customers/me/addresses` ganhou o CRUD completo (POST/PATCH/DELETE +
+ * marcar padrão) — `/minha-conta/enderecos` e `/minha-conta/configuracoes`
+ * deixam de usar CRUD local (AccountDataContext/localStorage) e passam a
+ * chamar essas funções direto, mesmo padrão já usado por
+ * avaliações/cupons do cliente.
  */
 
 export interface CustomerAddressResponse {
@@ -56,4 +56,92 @@ export async function getMyCustomerProfile(): Promise<CustomerProfileResponse | 
     console.error("[customers] getMyCustomerProfile failed, degrading:", err);
     return null;
   }
+}
+
+/**
+ * PATCH /customers/me — atualiza nome exibido/telefone. E-mail fica de
+ * fora (sem endpoint, sem fluxo de troca de e-mail nesta v1 — mesma
+ * decisão já refletida no campo `readOnly` da tela). Ação explícita do
+ * cliente: não degrada em silêncio, o form precisa saber se falhou.
+ */
+export async function updateMyProfile(input: {
+  fullName?: string;
+  phone?: string;
+}): Promise<CustomerProfileResponse> {
+  const result = await apiFetch<CustomerProfileResponse>("/customers/me", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+export interface AddressInput {
+  label?: string;
+  recipient: string;
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  isDefault?: boolean;
+}
+
+/** POST /customers/me/addresses — cria um endereço novo. Não degrada em silêncio. */
+export async function createMyAddress(
+  input: AddressInput,
+): Promise<CustomerAddressResponse> {
+  const result = await apiFetch<CustomerAddressResponse>("/customers/me/addresses", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+/** PATCH /customers/me/addresses/:id — atualização parcial. Não degrada em silêncio. */
+export async function updateMyAddress(
+  id: string,
+  input: Partial<AddressInput>,
+): Promise<CustomerAddressResponse> {
+  const result = await apiFetch<CustomerAddressResponse>(
+    `/customers/me/addresses/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
+/**
+ * DELETE /customers/me/addresses/:id — backend recusa remover o endereço
+ * padrão (400, mesma regra de negócio que já existia no mock local: ver
+ * CustomersService.deleteAddress em potala-identity-service). Não degrada
+ * em silêncio, a tela precisa mostrar a mensagem de erro real.
+ */
+export async function deleteMyAddress(id: string): Promise<void> {
+  await apiFetch<null>(`/customers/me/addresses/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+/** PATCH /customers/me/addresses/:id/default — marca este endereço como padrão. */
+export async function setMyDefaultAddress(
+  id: string,
+): Promise<CustomerAddressResponse> {
+  const result = await apiFetch<CustomerAddressResponse>(
+    `/customers/me/addresses/${encodeURIComponent(id)}/default`,
+    { method: "PATCH" },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
 }

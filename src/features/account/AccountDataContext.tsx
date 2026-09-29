@@ -23,6 +23,12 @@ import {
   createCustomerAccountSeed,
   isCustomerAccountDb,
 } from "@/features/account/seed";
+import {
+  addFavorite as apiAddFavorite,
+  listMyFavorites,
+  removeFavorite as apiRemoveFavorite,
+  type FavoriteResponse,
+} from "@/lib/api/favorites";
 import type {
   AppendCheckoutOrderResult,
   CurrentOrderSummary,
@@ -32,6 +38,9 @@ import { formatCheckoutAddressLabel } from "@/types/cart";
 interface AccountDataContextValue {
   db: CustomerAccountDb | null;
   isHydrated: boolean;
+  /** Real via GET /orders/favorites (orders-service) -- null enquanto carrega/sem sessão de cliente. */
+  favorites: FavoriteResponse[] | null;
+  favoritesLoading: boolean;
   toggleFavorite: (input: Omit<CustomerFavorite, "addedAt">) => void;
   isFavorite: (productId: string) => boolean;
   saveAddress: (address: Omit<CustomerAddress, "id"> & { id?: string }) => void;
@@ -120,6 +129,14 @@ export function AccountDataProvider({ children }: { children: ReactNode }) {
   const { user, isHydrated: authHydrated } = useAuth();
   const [db, setDb] = useState<CustomerAccountDb | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+  // Real via GET /orders/favorites -- ver lib/api/favorites.ts. Não vive
+  // mais em `db`/localStorage (era mock, ver seed.ts): `db.favorites`
+  // continua existindo só pro shape de CustomerAccountDb não quebrar,
+  // nunca mais lido por toggleFavorite/isFavorite abaixo -- mesmo
+  // raciocínio já aplicado a submitReview/createReturn (dead code, mock
+  // órfão, não removido pra manter o diff pequeno).
+  const [favorites, setFavorites] = useState<FavoriteResponse[] | null>(null);
+  const [favoritesLoading, setFavoritesLoading] = useState(true);
 
   useEffect(() => {
     if (!authHydrated) return;
@@ -145,32 +162,109 @@ export function AccountDataProvider({ children }: { children: ReactNode }) {
     };
   }, [authHydrated, user]);
 
+  useEffect(() => {
+    if (!authHydrated) return;
+
+    let cancelled = false;
+    // Mesmo padrão do efeito de `db` acima (Promise.resolve().then) --
+    // evita setState síncrono direto no corpo do efeito
+    // (react-hooks/set-state-in-effect), inclusive no branch de saída
+    // antecipada (usuário não é cliente).
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+
+      if (!user || user.role !== "customer") {
+        setFavorites(null);
+        setFavoritesLoading(false);
+        return;
+      }
+
+      setFavoritesLoading(true);
+      listMyFavorites({ limit: 100 })
+        .then((page) => {
+          if (!cancelled) setFavorites(page.items);
+        })
+        .catch((err) => {
+          console.error(
+            "[AccountDataContext] listMyFavorites failed, degrading to empty list:",
+            err,
+          );
+          if (!cancelled) setFavorites([]);
+        })
+        .finally(() => {
+          if (!cancelled) setFavoritesLoading(false);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authHydrated, user]);
+
   const persist = useCallback((next: CustomerAccountDb) => {
     setDb(next);
     writeDb(next);
   }, []);
 
-  const toggleFavorite = useCallback(
-    (input: Omit<CustomerFavorite, "addedAt">) => {
-      if (!db) return;
-      const exists = db.favorites.some(
-        (item) => item.productId === input.productId,
-      );
-      const favorites = exists
-        ? db.favorites.filter((item) => item.productId !== input.productId)
-        : [
-            ...db.favorites,
-            { ...input, addedAt: new Date().toISOString() },
-          ];
-      persist({ ...db, favorites });
-    },
-    [db, persist],
-  );
-
   const isFavorite = useCallback(
     (productId: string) =>
-      Boolean(db?.favorites.some((item) => item.productId === productId)),
-    [db],
+      Boolean(favorites?.some((item) => item.productId === productId)),
+    [favorites],
+  );
+
+  /**
+   * Otimista: atualiza `favorites` local antes da resposta do backend --
+   * ProductCard chama isto direto num onClick síncrono (sem await), o
+   * coração precisa reagir na hora do clique. `add`/`remove` são
+   * idempotentes no backend (ver FavoritesService), então uma rajada de
+   * cliques nunca gera erro visível; se a chamada falhar de verdade (rede
+   * caiu), a atualização otimista é revertida.
+   */
+  const toggleFavorite = useCallback(
+    (input: Omit<CustomerFavorite, "addedAt">) => {
+      const { productId } = input;
+      const alreadyFavorite = favorites?.some((item) => item.productId === productId) ?? false;
+
+      if (alreadyFavorite) {
+        setFavorites((prev) => prev?.filter((item) => item.productId !== productId) ?? prev);
+        apiRemoveFavorite(productId).catch((err) => {
+          console.error("[AccountDataContext] removeFavorite failed, revertendo:", err);
+          setFavorites((prev) =>
+            prev
+              ? [
+                  {
+                    id: `revert-${productId}`,
+                    customerId: "",
+                    productId,
+                    createdAt: new Date().toISOString(),
+                  },
+                  ...prev,
+                ]
+              : prev,
+          );
+        });
+        return;
+      }
+
+      const optimistic: FavoriteResponse = {
+        id: `optimistic-${productId}`,
+        customerId: "",
+        productId,
+        createdAt: new Date().toISOString(),
+      };
+      setFavorites((prev) => (prev ? [optimistic, ...prev] : [optimistic]));
+      apiAddFavorite(productId)
+        .then((real) => {
+          setFavorites((prev) =>
+            prev?.map((item) => (item.productId === productId ? real : item)) ?? prev,
+          );
+        })
+        .catch((err) => {
+          console.error("[AccountDataContext] addFavorite failed, revertendo:", err);
+          setFavorites((prev) => prev?.filter((item) => item.productId !== productId) ?? prev);
+        });
+    },
+    [favorites],
   );
 
   const saveAddress = useCallback(
@@ -436,6 +530,8 @@ export function AccountDataProvider({ children }: { children: ReactNode }) {
     () => ({
       db,
       isHydrated,
+      favorites,
+      favoritesLoading,
       toggleFavorite,
       isFavorite,
       saveAddress,
@@ -451,6 +547,8 @@ export function AccountDataProvider({ children }: { children: ReactNode }) {
       createReturn,
       createSupportTicket,
       db,
+      favorites,
+      favoritesLoading,
       isFavorite,
       isHydrated,
       removeAddress,
