@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { DEMO_SESSION_STORAGE_KEY } from "../../src/types/auth";
 import { createAdminSeed } from "../../src/features/admin/data/seed";
+import { credentialsOrThrow, hasCredentials, loginAs } from "./helpers/session";
 
 const PUBLIC_ROUTES = [
   "/",
@@ -10,6 +10,13 @@ const PUBLIC_ROUTES = [
   "/produto/japamala",
 ] as const;
 
+/**
+ * A busca administrativa global (Command+K no AdminTopbar) continua sobre
+ * `AdminDataContext`/`createAdminSeed()` — esse recurso não foi migrado
+ * pra dado real (ver status-migracao-microservicos.md), então o seed
+ * ainda é a fonte de verdade pra esse teste especificamente, mesmo com a
+ * sessão que dá acesso à tela já sendo real.
+ */
 const ADMIN_SEED_SELLER = createAdminSeed().sellers.find(
   (seller) => seller.id === "sel-1",
 );
@@ -25,35 +32,6 @@ async function waitForAccessHydration(page: Page) {
   });
 }
 
-async function fillDemoLogin(page: Page, email: string) {
-  await waitForAccessHydration(page);
-  await page.getByLabel("E-mail", { exact: true }).fill(email);
-  await page.locator('input[type="password"]').fill("demo123");
-  await page.getByLabel("Lembrar de mim").check();
-  await page.getByRole("button", { name: "Entrar" }).click();
-}
-
-async function seedDemoSession(
-  page: Page,
-  role: "admin" | "customer",
-) {
-  const session = {
-    userId: role === "admin" ? "demo-admin" : "demo-customer",
-    email: role === "admin" ? "admin@potala.demo" : "cliente@potala.demo",
-    name: role === "admin" ? "Administrador Potala" : "Cliente Potala",
-    role,
-    remember: true,
-    signedInAt: new Date().toISOString(),
-  };
-
-  await page.addInitScript(
-    ({ key, value }) => {
-      window.localStorage.setItem(key, value);
-    },
-    { key: DEMO_SESSION_STORAGE_KEY, value: JSON.stringify(session) },
-  );
-}
-
 test.describe("rotas públicas", () => {
   for (const route of PUBLIC_ROUTES) {
     test(`abre ${route} sem overflow horizontal`, async ({ page }) => {
@@ -67,15 +45,26 @@ test.describe("rotas públicas", () => {
   }
 });
 
-test.describe("área autenticada (demo)", () => {
+test.describe("área autenticada (sessão real)", () => {
+  test.beforeEach(() => {
+    test.skip(
+      !hasCredentials("admin"),
+      "requer E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD",
+    );
+  });
+
   test("login admin redireciona para /admin", async ({ page }) => {
-    await fillDemoLogin(page, "admin@potala.demo");
+    const creds = credentialsOrThrow("admin");
+    await waitForAccessHydration(page);
+    await page.getByLabel("E-mail", { exact: true }).fill(creds.email);
+    await page.locator('input[type="password"]').fill(creds.password);
+    await page.getByRole("button", { name: "Entrar" }).click();
     await expect(page).toHaveURL(/\/admin/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: /Painel/i })).toBeVisible();
   });
 
-  test("rotas admin principais respondem", async ({ page }) => {
-    await seedDemoSession(page, "admin");
+  test("rotas admin principais respondem", async ({ page, context }) => {
+    await loginAs(context, "admin");
 
     for (const route of [
       "/admin",
@@ -94,8 +83,11 @@ test.describe("área autenticada (demo)", () => {
     }
   });
 
-  test("busca administrativa global com CommandDialog", async ({ page }) => {
-    await seedDemoSession(page, "admin");
+  test("busca administrativa global com CommandDialog", async ({
+    page,
+    context,
+  }) => {
+    await loginAs(context, "admin");
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: /Painel/i })).toBeVisible();
 
@@ -140,11 +132,22 @@ test.describe("área autenticada (demo)", () => {
     await expect(searchDialog).toBeHidden();
     await expect(searchTrigger).toBeFocused();
   });
+});
 
-  test("minha-conta com cliente", async ({ page }) => {
-    await seedDemoSession(page, "customer");
+test.describe("minha conta (sessão real)", () => {
+  test.beforeEach(() => {
+    test.skip(
+      !hasCredentials("customer"),
+      "requer E2E_CUSTOMER_EMAIL/E2E_CUSTOMER_PASSWORD",
+    );
+  });
+
+  test("minha-conta com cliente", async ({ page, context }) => {
+    await loginAs(context, "customer");
     await page.goto("/minha-conta");
     await expect(page).toHaveURL(/\/minha-conta/, { timeout: 15_000 });
-    await expect(page.getByRole("heading", { level: 1, name: "Resumo da Conta" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Resumo da Conta" }),
+    ).toBeVisible();
   });
 });

@@ -1,10 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import {
-  DEMO_SESSION_STORAGE_KEY,
-  SELLER_DEMO_EMAIL,
-  SELLER_DEMO_ID,
-} from "../../src/types/auth";
-import { createAdminSeed } from "../../src/features/admin/data/seed";
+import { credentialsOrThrow, hasCredentials, loginAs } from "./helpers/session";
 
 const VIEWPORTS = [
   { name: "390", width: 390, height: 844 },
@@ -14,65 +9,50 @@ const VIEWPORTS = [
   { name: "1920", width: 1920, height: 1080 },
 ] as const;
 
+/**
+ * Rotas reais do admin (ADMIN_NAV, src/data/admin.ts). Integrações,
+ * Repasses, Relatórios, Configurações e Entregas saíram do menu e
+ * respondem 404 de propósito (ligadas à decisão de gateway de pagamento
+ * ainda em aberto — ver status-migracao-microservicos.md, "4 telas mock
+ * do admin escondidas").
+ */
 const ADMIN_ROUTES = [
   "/admin",
   "/admin/vendedores",
   "/admin/produtos",
-  "/admin/pedidos",
-  "/admin/entregas",
-  "/admin/financeiro",
-  "/admin/cupons",
   "/admin/catalogo",
+  "/admin/cupons",
+  "/admin/pedidos",
+  "/admin/financeiro",
   "/admin/clientes",
+  "/admin/devolucoes",
   "/admin/conteudos",
-  "/admin/relatorios",
-  "/admin/configuracoes",
+  "/admin/administradores",
 ] as const;
 
-async function clearBrowserStorage(page: Page) {
+/** Rotas reais de /minha-conta (ACCOUNT_NAV, src/data/account.ts). */
+const ACCOUNT_ROUTES = [
+  "/minha-conta",
+  "/minha-conta/pedidos",
+  "/minha-conta/devolucoes",
+  "/minha-conta/enderecos",
+  "/minha-conta/favoritos",
+  "/minha-conta/avaliacoes",
+  "/minha-conta/cupons",
+  "/minha-conta/configuracoes",
+  "/minha-conta/ajuda",
+] as const;
+
+function uniqueSuffix() {
+  return Date.now().toString(36);
+}
+
+async function clearSession(page: Page) {
+  await page.context().clearCookies();
   await page.addInitScript(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
-}
-
-async function seedSession(
-  page: Page,
-  role: "admin" | "customer" | "seller",
-) {
-  const session = {
-    userId:
-      role === "admin"
-        ? "demo-admin"
-        : role === "seller"
-          ? "demo-seller"
-          : "demo-customer",
-    email:
-      role === "admin"
-        ? "admin@potala.demo"
-        : role === "seller"
-          ? SELLER_DEMO_EMAIL
-          : "cliente@potala.demo",
-    name:
-      role === "admin"
-        ? "Administrador Potala"
-        : role === "seller"
-          ? "Vendedor Demo"
-          : "Cliente Potala",
-    role,
-    remember: true,
-    signedInAt: new Date().toISOString(),
-    sellerId: role === "seller" ? SELLER_DEMO_ID : undefined,
-  };
-
-  await page.addInitScript(
-    ({ key, value }) => {
-      window.localStorage.clear();
-      window.sessionStorage.clear();
-      window.localStorage.setItem(key, value);
-    },
-    { key: DEMO_SESSION_STORAGE_KEY, value: JSON.stringify(session) },
-  );
 }
 
 async function waitForAccessHydration(page: Page) {
@@ -84,7 +64,7 @@ async function waitForAccessHydration(page: Page) {
 
 test.describe("storefront busca e âncoras", () => {
   test.beforeEach(async ({ page }) => {
-    await clearBrowserStorage(page);
+    await clearSession(page);
   });
 
   test("busca da loja abre CommandDialog e navega para produto", async ({
@@ -127,101 +107,159 @@ test.describe("storefront busca e âncoras", () => {
 });
 
 test.describe("vendedor /loja", () => {
+  test.beforeEach(() => {
+    test.skip(
+      !hasCredentials("seller"),
+      "requer E2E_SELLER_EMAIL/E2E_SELLER_PASSWORD (loja ACTIVE)",
+    );
+  });
+
   test("login vendedor redireciona para /loja", async ({ page }) => {
-    await clearBrowserStorage(page);
+    const creds = credentialsOrThrow("seller");
+    await clearSession(page);
     await waitForAccessHydration(page);
-    await page.getByLabel("E-mail", { exact: true }).fill(SELLER_DEMO_EMAIL);
-    await page.locator('input[type="password"]').fill("demo123");
+    await page.getByLabel("E-mail", { exact: true }).fill(creds.email);
+    await page.locator('input[type="password"]').fill(creds.password);
     await page.getByRole("button", { name: "Entrar" }).click();
     await expect(page).toHaveURL(/\/loja$/, { timeout: 15_000 });
   });
 
   test("protege /loja sem sessão", async ({ page }) => {
-    await clearBrowserStorage(page);
+    await clearSession(page);
     await page.goto("/loja");
     await expect(page).toHaveURL(/\/acesso/, { timeout: 15_000 });
   });
 
-  test("isolamento sellerId em pedido alheio", async ({ page }) => {
-    await seedSession(page, "seller");
-    const otherOrder = createAdminSeed().orders.find(
-      (order) => order.sellerId !== SELLER_DEMO_ID,
+  /**
+   * Substitui o teste antigo "isolamento sellerId em pedido alheio", que
+   * dependia de `createAdminSeed()` pra achar um pedido de outra loja —
+   * não existe mais dado seed pra pedido real. Precisa de duas contas de
+   * vendedor de teste conhecidas (E2E_SELLER_EMAIL e uma segunda loja) e
+   * do id de um pedido real da SEGUNDA loja, nenhum dos dois disponível
+   * por padrão — pulado até serem configurados, em vez de inventar um id.
+   */
+  test("isolamento: pedido de outra loja não abre no detalhe", async ({
+    page,
+    context,
+  }) => {
+    test.skip(
+      !process.env.E2E_OTHER_SELLER_ORDER_ID,
+      "requer E2E_OTHER_SELLER_ORDER_ID (id de SellerOrder de uma loja diferente de E2E_SELLER_EMAIL)",
     );
-    if (!otherOrder) {
-      test.skip();
-      return;
-    }
-    await page.goto(`/loja/pedidos/${otherOrder.id}`);
+    await loginAs(context, "seller");
+    await page.goto(`/loja/pedidos/${process.env.E2E_OTHER_SELLER_ORDER_ID}`);
     await expect(page.getByRole("heading", { name: /indisponível/i })).toBeVisible();
   });
 
-  test("lista e edita produto do vendedor", async ({ page }) => {
-    await seedSession(page, "seller");
+  test("publica/despublica produto do vendedor", async ({ page, context }) => {
+    await loginAs(context, "seller");
     await page.goto("/loja/produtos");
     await expect(page.getByRole("heading", { name: "Produtos" })).toBeVisible();
     const firstProduct = page.locator("table a").first();
     await firstProduct.click();
     await expect(page).toHaveURL(/\/loja\/produtos\//);
-    await page.getByLabel("Estoque").fill("12");
-    await page.getByRole("button", { name: /Salvar alterações/i }).click();
-    await expect(page.getByText(/atualizado/i)).toBeVisible();
+
+    const toggleButton = page.getByRole("button", {
+      name: /^(Publicar|Despublicar)$/,
+    });
+    await expect(toggleButton).toBeVisible();
+    const initialLabel = await toggleButton.textContent();
+    await toggleButton.click();
+    await expect(toggleButton).not.toHaveText(initialLabel ?? "", {
+      timeout: 15_000,
+    });
+    // Volta ao estado original pra não deixar o produto de teste mudado
+    // de status como efeito colateral do teste.
+    await toggleButton.click();
+    await expect(toggleButton).toHaveText(initialLabel ?? "", {
+      timeout: 15_000,
+    });
   });
 
-  test("cria rascunho de produto", async ({ page }) => {
-    await seedSession(page, "seller");
+  test("cria produto novo", async ({ page, context }) => {
+    await loginAs(context, "seller");
     await page.goto("/loja/produtos/novo");
-    await page.getByLabel("Título").fill("Kit Ritual Demo");
-    await page.getByLabel("Preço (R$)").fill("49.9");
+
+    const suffix = uniqueSuffix();
+    await page.getByLabel("Título").fill(`Produto E2E ${suffix}`);
+    await page
+      .getByLabel("Categoria")
+      .selectOption({ index: 1 }); // primeira opção real após o placeholder
+    await page.getByLabel("Preço (R$)").fill("49.90");
+    await page.getByLabel("SKU").fill(`E2E-${suffix}`);
     await page.getByLabel("Estoque").fill("3");
-    await page.getByRole("button", { name: /Salvar rascunho/i }).click();
+
+    await page.getByRole("button", { name: "Criar produto" }).click();
     await expect(page).toHaveURL(/\/loja\/produtos\//, { timeout: 15_000 });
   });
 
-  test("muda estoque na tela dedicada", async ({ page }) => {
-    await seedSession(page, "seller");
+  test("muda estoque na tela dedicada", async ({ page, context }) => {
+    await loginAs(context, "seller");
     await page.goto("/loja/estoque");
     const input = page.locator('input[id^="stk-"]').first();
+    await expect(input).toBeVisible({ timeout: 15_000 });
+    const original = await input.inputValue();
     await input.fill("7");
     await page.getByRole("button", { name: "Salvar" }).first().click();
     await expect(page.getByText(/Estoque atualizado/i)).toBeVisible();
+    // Restaura o valor original pra não deixar o estoque real alterado
+    // como efeito colateral do teste.
+    if (original && original !== "7") {
+      await input.fill(original);
+      await page.getByRole("button", { name: "Salvar" }).first().click();
+      await expect(page.getByText(/Estoque atualizado/i)).toBeVisible();
+    }
   });
 
-  test("pedidos do vendedor", async ({ page }) => {
-    await seedSession(page, "seller");
+  test("pedidos do vendedor", async ({ page, context }) => {
+    await loginAs(context, "seller");
     await page.goto("/loja/pedidos");
     await expect(page.getByRole("heading", { name: "Pedidos" })).toBeVisible();
   });
 });
 
 test.describe("conta do cliente", () => {
-  test("rotas principais da conta", async ({ page }) => {
-    await seedSession(page, "customer");
-    for (const route of [
-      "/minha-conta",
-      "/minha-conta/pedidos",
-      "/minha-conta/enderecos",
-      "/minha-conta/favoritos",
-      "/minha-conta/avaliacoes",
-      "/minha-conta/devolucoes",
-      "/minha-conta/ajuda",
-    ]) {
+  test.beforeEach(() => {
+    test.skip(
+      !hasCredentials("customer"),
+      "requer E2E_CUSTOMER_EMAIL/E2E_CUSTOMER_PASSWORD",
+    );
+  });
+
+  test("rotas principais da conta", async ({ page, context }) => {
+    await loginAs(context, "customer");
+    for (const route of ACCOUNT_ROUTES) {
       await page.goto(route);
       await expect(page).toHaveURL(new RegExp(route.replace(/\//g, "\\/")));
     }
   });
 
-  test("histórico de pedidos lista seed", async ({ page }) => {
-    await seedSession(page, "customer");
+  /**
+   * Substitui "histórico de pedidos lista seed" (dependia do pedido mock
+   * POT-2026-0042, que não existe mais). Sem um número de pedido real
+   * conhecido de antemão, o teste confirma que a lista carrega — real ou
+   * vazia, ambos são estados válidos pra uma conta de teste qualquer.
+   * Defina E2E_CUSTOMER_ORDER_NUMBER pra também conferir um pedido
+   * específico.
+   */
+  test("histórico de pedidos carrega", async ({ page, context }) => {
+    await loginAs(context, "customer");
     await page.goto("/minha-conta/pedidos");
-    await expect(
-      page.getByRole("link", { name: /POT-2026-0042/ }).last(),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Meus Pedidos" })).toBeVisible({
+      timeout: 15_000,
+    });
+    const orderNumber = process.env.E2E_CUSTOMER_ORDER_NUMBER;
+    if (orderNumber) {
+      await expect(
+        page.getByRole("link", { name: new RegExp(orderNumber) }).last(),
+      ).toBeVisible();
+    }
   });
 
-  test("endereço CRUD básico", async ({ page }) => {
-    await seedSession(page, "customer");
+  test("endereço CRUD básico", async ({ page, context }) => {
+    await loginAs(context, "customer");
     await page.goto("/minha-conta/enderecos");
-    await page.getByLabel("Rótulo").fill("Temporário");
+    await page.getByLabel("Rótulo").fill("Temporário E2E");
     await page.getByLabel("Destinatário").fill("Cliente Demo");
     await page.getByLabel("Rua").fill("Rua Teste");
     await page.getByLabel("Número").fill("10");
@@ -229,12 +267,12 @@ test.describe("conta do cliente", () => {
     await page.getByLabel("Cidade").fill("São Paulo");
     await page.getByLabel("UF").fill("SP");
     await page.getByLabel("CEP").fill("01000-000");
-    await page.getByRole("button", { name: "Salvar" }).click();
+    await page.getByRole("button", { name: "Adicionar endereço" }).click();
     await expect(page.getByText(/Endereço adicionado/i)).toBeVisible();
   });
 
-  test("favorito remover na conta", async ({ page }) => {
-    await seedSession(page, "customer");
+  test("favorito remover na conta", async ({ page, context }) => {
+    await loginAs(context, "customer");
     await page.goto("/minha-conta/favoritos");
     const remove = page.getByRole("button", { name: "Remover" }).first();
     if (await remove.count()) {
@@ -243,28 +281,35 @@ test.describe("conta do cliente", () => {
     await expect(page.getByRole("heading", { name: "Favoritos" })).toBeVisible();
   });
 
-  test("avaliação pendente", async ({ page }) => {
-    await seedSession(page, "customer");
+  test("avaliações — lista carrega", async ({ page, context }) => {
+    await loginAs(context, "customer");
     await page.goto("/minha-conta/avaliacoes");
     await expect(page.getByRole("heading", { name: "Avaliações" })).toBeVisible();
   });
 
-  test("devolução de pedido entregue", async ({ page }) => {
-    await seedSession(page, "customer");
+  /**
+   * `/minha-conta/devolucoes` virou só leitura (o formulário de
+   * solicitação mudou pra `/minha-conta/pedidos/[id]`, ver
+   * status-migracao-microservicos.md) — o teste antigo preenchia um
+   * formulário que não existe mais nesta tela.
+   */
+  test("devoluções — lista carrega", async ({ page, context }) => {
+    await loginAs(context, "customer");
     await page.goto("/minha-conta/devolucoes");
-    await page.getByLabel("Pedido entregue").selectOption({ index: 1 });
-    const checkbox = page.getByRole("checkbox").first();
-    await checkbox.check();
-    await page.getByLabel("Motivo").fill("Produto danificado");
-    await page.getByLabel("Descrição").fill("Embalagem aberta no recebimento.");
-    await page.getByRole("button", { name: /Enviar solicitação/i }).click();
-    await expect(page.getByText(/Solicitação registrada/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Devoluções" })).toBeVisible();
   });
 });
 
-test.describe("admin rotas e viewports", () => {
-  test("todas as rotas admin principais", async ({ page }) => {
-    await seedSession(page, "admin");
+test.describe("admin rotas e modal", () => {
+  test.beforeEach(() => {
+    test.skip(
+      !hasCredentials("admin"),
+      "requer E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD",
+    );
+  });
+
+  test("todas as rotas admin principais", async ({ page, context }) => {
+    await loginAs(context, "admin");
     for (const route of ADMIN_ROUTES) {
       await page.goto(route);
       await expect(page.locator("body")).toBeVisible();
@@ -272,23 +317,35 @@ test.describe("admin rotas e viewports", () => {
     }
   });
 
-  test("AdminModal Novo vendedor: visível, foco, Escape e backdrop", async ({
+  /**
+   * Substitui "AdminModal Novo vendedor" — esse botão não existe mais
+   * (não há `POST /admin/sellers`, ver status-migracao-microservicos.md).
+   * O modal de "Novo administrador" (`/admin/administradores`, feature
+   * mais recente do projeto) segue exatamente o mesmo `AdminModal`
+   * compartilhado, então cobre a mesma superfície de acessibilidade
+   * (foco, Escape, clique no backdrop, scroll lock) sem inventar uma
+   * ação que o backend não tem. Nunca submete o formulário — só testa o
+   * comportamento do modal em si, pra não criar um admin de verdade a
+   * cada rodada de teste.
+   */
+  test("AdminModal Novo administrador: visível, foco, Escape e backdrop", async ({
     page,
+    context,
   }) => {
-    await seedSession(page, "admin");
-    await page.goto("/admin/vendedores");
-    await expect(page.getByRole("heading", { name: "Vendedores" })).toBeVisible({
-      timeout: 15_000,
-    });
+    await loginAs(context, "admin");
+    await page.goto("/admin/administradores");
+    await expect(
+      page.getByRole("heading", { name: "Administradores" }),
+    ).toBeVisible({ timeout: 15_000 });
 
-    const openButton = page.getByRole("button", { name: "Novo vendedor" });
+    const openButton = page.getByRole("button", { name: "Novo administrador" });
     await expect(openButton).toBeVisible();
     await openButton.click();
 
-    const dialog = page.getByRole("dialog", { name: "Novo vendedor" });
+    const dialog = page.getByRole("dialog", { name: "Novo administrador" });
     await expect(dialog).toBeVisible();
     await expect(
-      dialog.getByRole("heading", { name: "Novo vendedor" }),
+      dialog.getByRole("heading", { name: "Novo administrador" }),
     ).toBeVisible();
 
     const focusInside = await page.evaluate(() => {
@@ -305,11 +362,6 @@ test.describe("admin rotas e viewports", () => {
     if (box && viewport) {
       expect(box.width).toBeGreaterThan(0);
       expect(box.height).toBeGreaterThan(0);
-      expect(box.x + box.width).toBeGreaterThan(0);
-      expect(box.y + box.height).toBeGreaterThan(0);
-      expect(box.x).toBeLessThan(viewport.width);
-      expect(box.y).toBeLessThan(viewport.height);
-      // Maior parte do diálogo dentro da viewport (com margem de 1px)
       expect(box.x).toBeGreaterThanOrEqual(-1);
       expect(box.y).toBeGreaterThanOrEqual(-1);
       expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
@@ -335,14 +387,17 @@ test.describe("admin rotas e viewports", () => {
     });
     expect(scrollLockCleared).toBe(true);
   });
+});
 
+test.describe("home — overflow horizontal por viewport", () => {
+  // Sem sessão nenhuma — roda sempre, independente de credenciais de teste.
   for (const viewport of VIEWPORTS) {
     test(`sem overflow horizontal em ${viewport.name}`, async ({ page }) => {
       await page.setViewportSize({
         width: viewport.width,
         height: viewport.height,
       });
-      await clearBrowserStorage(page);
+      await clearSession(page);
       await page.goto("/");
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth > window.innerWidth + 1,
