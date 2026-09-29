@@ -564,3 +564,50 @@ export async function archiveAdminContent(id: string): Promise<AdminContent> {
   }
   return result;
 }
+
+/**
+ * Mirrors AdminService.listAdmins/createAdmin's return shape
+ * (identity-service, modules/admin/admin.service.ts) exactly. Só um admin
+ * já autenticado consegue chegar em POST /admin/admins -- não existe rota
+ * pública de auto-cadastro de admin em lugar nenhum (decisão explícita,
+ * ver status-migracao-microservicos.md).
+ */
+export interface AdminUser {
+  id: string;
+  email: string;
+  fullName: string | null;
+  createdAt: string;
+}
+
+/** GET /admin/admins -- cursor-paginated, mesma PaginationQueryDto de sempre. */
+export async function listAdminAdmins(params?: {
+  limit?: number;
+  cursor?: string | null;
+}): Promise<Paginated<AdminUser>> {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.cursor) query.set("cursor", params.cursor);
+  const qs = query.toString();
+  const result = await apiFetch<Paginated<AdminUser>>(
+    `/admin/admins${qs ? `?${qs}` : ""}`,
+  );
+  return result ?? { items: [], pageInfo: { hasNextPage: false, nextCursor: null } };
+}
+
+export interface CreateAdminUserInput {
+  email: string;
+  password: string;
+  name: string;
+}
+
+/** POST /admin/admins -- cria um novo admin, sempre ACTIVE. */
+export async function createAdminAdmin(input: CreateAdminUserInput): Promise<AdminUser> {
+  const result = await apiFetch<AdminUser>("/admin/admins", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}

@@ -29,4 +29,5 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "clientes", label: "Clientes", href: "/admin/clientes" },
   { id: "devolucoes", label: "Devoluções", href: "/admin/devolucoes" },
   { id: "conteudos", label: "Conteúdos / Cursos", href: "/admin/conteudos" },
+  { id: "administradores", label: "Administradores", href: "/admin/administradores" },
 ];
