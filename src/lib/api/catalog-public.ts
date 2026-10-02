@@ -59,6 +59,22 @@ export interface Paginated<T> {
 }
 
 /**
+ * Investigação do 429/504 em produção (02/10, ver Claude Project): estas
+ * três funções rodam em Server Components na Vercel (SSR/RSC), sem
+ * AbortController/timeout nenhum antes desta mudança -- um
+ * catalog-service/gateway lento ou dormindo (cold start do Render) deixava
+ * o `fetch` pendurado até a própria Vercel matar a function em 300s
+ * ("Vercel Runtime Timeout Error"), em vez de cair no catch já existente
+ * abaixo. 20s dá folga suficiente pra um cold start normal do Render
+ * (ainda bem menor que os 300s da Vercel) sem deixar a function inteira
+ * travada. Escopo deliberadamente limitado a este arquivo -- não é o
+ * timeout global de `apiFetch` (client.ts), não afeta login/checkout/
+ * pedidos (auth.ts, orders.ts), que têm seus próprios padrões de retry/
+ * timeout (ou a ausência deliberada de um, no caso do POST checkout).
+ */
+const PUBLIC_CATALOG_TIMEOUT_MS = 20_000;
+
+/**
  * GET /public/categories — active categories, no auth.
  *
  * Swallows any failure (network error, gateway 502/503/504, catalog-service
@@ -69,10 +85,16 @@ export interface Paginated<T> {
  * to show" and degrades gracefully (renders `null`/an empty state) rather
  * than crashing the whole page with a 500. Logged so the failure is still
  * visible in Vercel's function logs, just no longer fatal to the request.
+ *
+ * `signal: AbortSignal.timeout(...)` (ver PUBLIC_CATALOG_TIMEOUT_MS acima)
+ * garante que esse catch é alcançado em até ~20s em vez de ficar pendurado
+ * esperando o fetch nativo resolver por conta própria.
  */
 export async function listPublicCategories(): Promise<PublicCategory[]> {
   try {
-    const result = await apiFetch<PublicCategory[]>("/public/categories");
+    const result = await apiFetch<PublicCategory[]>("/public/categories", {
+      signal: AbortSignal.timeout(PUBLIC_CATALOG_TIMEOUT_MS),
+    });
     return result ?? [];
   } catch (err) {
     console.error("[catalog-public] listPublicCategories failed, degrading to empty list:", err);
@@ -113,6 +135,7 @@ export async function listPublicProducts(
   try {
     const result = await apiFetch<Paginated<PublicProduct>>(
       `/public/products${qs ? `?${qs}` : ""}`,
+      { signal: AbortSignal.timeout(PUBLIC_CATALOG_TIMEOUT_MS) },
     );
     return result ?? EMPTY_PRODUCTS_PAGE;
   } catch (err) {
@@ -138,7 +161,9 @@ export async function listPublicProducts(
  */
 export async function getPublicProduct(id: string): Promise<PublicProduct | null> {
   try {
-    return await apiFetch<PublicProduct>(`/public/products/${encodeURIComponent(id)}`);
+    return await apiFetch<PublicProduct>(`/public/products/${encodeURIComponent(id)}`, {
+      signal: AbortSignal.timeout(PUBLIC_CATALOG_TIMEOUT_MS),
+    });
   } catch (err) {
     const status = (err as { status?: number }).status;
     if (status !== 404 && status !== 400) {
