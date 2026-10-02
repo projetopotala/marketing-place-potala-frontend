@@ -19,7 +19,7 @@ const PAGE_SIZE = 10;
  * leitura -- solicitar uma devolução acontece no detalhe do pedido
  * (`/minha-conta/pedidos/[id]`, `OrderItemReturnForm`), mesmo lugar onde
  * já vive o formulário de avaliação, porque a elegibilidade (SellerOrder
- * CONFIRMED) e a identidade do item só existem naquela tela -- juntar tudo
+ * DELIVERED) e a identidade do item só existem naquela tela -- juntar tudo
  * aqui de novo exigiria refazer a mesma busca de pedidos elegíveis, sem
  * ganho real.
  */
@@ -74,14 +74,13 @@ export default function AccountReturnsPage() {
   return (
     <AccountChrome
       title="Devoluções"
-      lead="Solicite uma devolução no detalhe de um pedido confirmado. Aqui ficam suas solicitações."
+      lead="Solicite uma devolução no detalhe de um pedido entregue. Aqui ficam suas solicitações."
       breadcrumbCurrent="Devoluções"
     >
       <p>
         Para solicitar uma devolução, acesse{" "}
         <Link href="/minha-conta/pedidos">Meus Pedidos</Link> e abra o
-        pedido desejado -- o formulário aparece nos itens já confirmados
-        pelo vendedor.
+        pedido desejado -- o formulário aparece nos itens já entregues.
       </p>
 
       <section style={{ marginTop: 24 }}>

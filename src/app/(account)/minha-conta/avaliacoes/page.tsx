@@ -94,8 +94,7 @@ export default function AccountReviewsPage() {
       <p>
         Para avaliar um pedido, acesse{" "}
         <Link href="/minha-conta/pedidos">Meus Pedidos</Link> e abra o
-        pedido desejado -- o formulário aparece nos itens já confirmados
-        pelo vendedor.
+        pedido desejado -- o formulário aparece nos itens já entregues.
       </p>
 
       <section style={{ marginTop: 24 }}>

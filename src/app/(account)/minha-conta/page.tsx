@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ACCOUNT_ACTIVE_COUPONS, ACCOUNT_WELCOME_STATS } from "@/data/account";
+import { ACCOUNT_WELCOME_STATS } from "@/data/account";
 import { AccountChrome } from "@/components/account/AccountChrome";
 import { AccountWelcomePanel } from "@/components/account/AccountWelcomePanel";
 import { AccountMetricCard } from "@/components/account/AccountMetricCard";
@@ -15,7 +15,10 @@ import {
   type CustomerProfileResponse,
 } from "@/lib/api/customers";
 import { listMyOrders, ORDER_STATUS_LABEL, type OrderResponse } from "@/lib/api/orders";
+import { listActiveCouponsForCustomer, type Coupon } from "@/lib/api/coupons";
+import { getPublicProduct, type PublicProduct } from "@/lib/api/catalog-public";
 import { formatPrice } from "@/data/marketplace";
+import type { AccountCoupon } from "@/types/account";
 import styles from "./page.module.css";
 
 function formatMemberSince(iso: string): string {
@@ -34,18 +37,51 @@ function formatAddressLine(address: CustomerAddressResponse): string {
 }
 
 /**
+ * Mesmo mapeamento de /minha-conta/cupons (CouponsPage, toAccountCoupon) --
+ * duplicado aqui em vez de extraído pra um util compartilhado, de propósito:
+ * mantém as duas páginas independentes (baixo risco, investigação pré-
+ * apresentação 02/10), já que é só ~15 linhas.
+ */
+function toAccountCoupon(coupon: Coupon): AccountCoupon {
+  const discount =
+    coupon.discountType === "PERCENT"
+      ? `${coupon.discountValue}% de desconto`
+      : `${(coupon.discountValue / 100).toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        })} de desconto`;
+
+  return {
+    id: coupon.id,
+    code: coupon.code,
+    description: `${coupon.name} · ${discount}`,
+    expiresAt: new Date(coupon.endsAt).toLocaleDateString("pt-BR"),
+  };
+}
+
+/**
  * Perfil rico do cliente (novo nesta sessão — ver item 3 do "Pendente" em
  * status-migracao-microservicos.md). `profile` (GET /customers/me) e
  * `realOrders` (GET /orders, até 50) substituem o que antes vinha só do
- * mock local (AccountDataContext/localStorage) — favoritos, cupons e
- * avaliações pendentes continuam mock, sem model correspondente no
- * backend (decisão de escopo já registrada). As duas chamadas degradam
- * pra vazio/null em falha (mesmo padrão de catalog-public.ts) em vez de
- * derrubar a página.
+ * mock local (AccountDataContext/localStorage). Favoritos e cupons do
+ * Resumo foram alinhados com as telas dedicadas (investigação pré-
+ * apresentação, 02/10): favoritos agora vêm de `useAccountData().favorites`
+ * (GET /orders/favorites, mesma fonte de `/minha-conta/favoritos`) e cupons
+ * de `listActiveCouponsForCustomer()` (GET /orders/coupons, mesma fonte de
+ * `/minha-conta/cupons`) -- nenhum dos dois usa mais a constante mock
+ * antiga. O card "Avaliações pendentes" foi removido daqui: não existe
+ * endpoint real pra essa contagem hoje (só lista de avaliações já
+ * enviadas, ver /minha-conta/avaliacoes), e o dado antigo era só o seed
+ * local. Todas as chamadas degradam pra vazio/null em falha (mesmo padrão
+ * de catalog-public.ts) em vez de derrubar a página.
  */
 export default function MinhaContaPage() {
   const { user } = useAuth();
-  const { db, isHydrated } = useAccountData();
+  const {
+    isHydrated,
+    favorites: realFavorites,
+    favoritesLoading,
+  } = useAccountData();
   const name = user?.name?.trim() || "Cliente Potala";
 
   const [profile, setProfile] = useState<CustomerProfileResponse | null>(null);
@@ -53,6 +89,15 @@ export default function MinhaContaPage() {
   const [realOrders, setRealOrders] = useState<OrderResponse[] | null>(null);
   const [realOrdersHasMore, setRealOrdersHasMore] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [coupons, setCoupons] = useState<AccountCoupon[] | null>(null);
+  const [couponsLoading, setCouponsLoading] = useState(true);
+  // Resolve só os produtos dos até 4 favoritos mostrados aqui (mesmo padrão
+  // de /minha-conta/favoritos, getPublicProduct por id, em paralelo) --
+  // FavoriteResponse (GET /orders/favorites) só tem productId, sem
+  // nome/slug/imagem, então precisa dessa segunda chamada pra exibir o link.
+  const [favoriteProducts, setFavoriteProducts] = useState<
+    Record<string, PublicProduct | null>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
@@ -84,14 +129,43 @@ export default function MinhaContaPage() {
         if (!cancelled) setOrdersLoading(false);
       });
 
+    listActiveCouponsForCustomer()
+      .then((result) => {
+        if (!cancelled) setCoupons(result.map(toAccountCoupon));
+      })
+      .catch((err) => {
+        console.error(
+          "[minha-conta] listActiveCouponsForCustomer falhou, degradando para lista vazia:",
+          err,
+        );
+        if (!cancelled) setCoupons([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCouponsLoading(false);
+      });
+
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const favorites = db?.favorites ?? [];
-  const pendingReviews =
-    db?.reviews.filter((review) => review.status === "pending").length ?? 0;
+  useEffect(() => {
+    if (!realFavorites || realFavorites.length === 0) return;
+
+    let cancelled = false;
+    const ids = realFavorites.slice(0, 4).map((item) => item.productId);
+    Promise.all(
+      ids.map((id) => getPublicProduct(id).then((product) => [id, product] as const)),
+    ).then((entries) => {
+      if (!cancelled) setFavoriteProducts(Object.fromEntries(entries));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [realFavorites]);
+
+  const favorites = realFavorites ?? [];
 
   const realAddresses = profile?.addresses ?? [];
   const nonCancelledOrders = (realOrders ?? []).filter(
@@ -119,7 +193,7 @@ export default function MinhaContaPage() {
     {
       id: "cupons",
       label: "Cupons disponíveis",
-      value: String(ACCOUNT_ACTIVE_COUPONS.length),
+      value: couponsLoading ? "…" : String((coupons ?? []).length),
       hint: "Prontos para uso",
     },
     {
@@ -131,14 +205,8 @@ export default function MinhaContaPage() {
     {
       id: "favoritos",
       label: "Favoritos",
-      value: String(favorites.length),
+      value: favoritesLoading ? "…" : String(favorites.length),
       hint: "Lista de desejos",
-    },
-    {
-      id: "avaliacoes",
-      label: "Avaliações pendentes",
-      value: String(pendingReviews),
-      hint: "Aguardando sua opinião",
     },
   ];
 
@@ -151,15 +219,17 @@ export default function MinhaContaPage() {
       {!isHydrated ? (
         <p role="status">Carregando dados da conta…</p>
       ) : (
-        // Bug real encontrado nesta sessao: essa condicao exigia
+        // Bug real encontrado em sessao anterior: essa condicao exigia
         // `isHydrated && db`, mas AccountDataContext SEMPRE deixa `db`
         // null pra qualquer usuario que nao seja role === "customer"
         // (vendedor, admin) -- por design, nao por falha de carregamento.
         // Resultado: um vendedor/admin que caisse em /minha-conta ficava
         // preso pra sempre em "Carregando dados da conta...", porque
-        // `db` nunca deixava de ser null. `favorites`/`pendingReviews`
-        // logo abaixo ja tratam `db` nulo com `db?.` (viram lista vazia/
-        // 0), entao bastava nao gatear a tela inteira por `db`.
+        // `db` nunca deixava de ser null. A correcao foi gatear a tela
+        // inteira apenas por `isHydrated`. Esta secao ja nao le `db` --
+        // favoritos e cupons agora vem de fontes reais (useAccountData().
+        // favorites / listActiveCouponsForCustomer()), resolvidas de forma
+        // independente e com seus proprios estados de loading.
         <>
           <AccountWelcomePanel
             name={name}
@@ -197,7 +267,11 @@ export default function MinhaContaPage() {
               <Link href="/minha-conta/pedidos">Ver todos</Link>
             </section>
 
-            <ActiveCoupons coupons={ACCOUNT_ACTIVE_COUPONS} />
+            {couponsLoading ? (
+              <p role="status">Carregando cupons…</p>
+            ) : (
+              <ActiveCoupons coupons={coupons ?? []} />
+            )}
 
             <section aria-labelledby="addr-title">
               <h2 id="addr-title">Endereços</h2>
@@ -221,15 +295,21 @@ export default function MinhaContaPage() {
 
             <section aria-labelledby="fav-title">
               <h2 id="fav-title">Favoritos</h2>
-              {favorites.length === 0 ? (
+              {favoritesLoading ? (
+                <p role="status">Carregando favoritos…</p>
+              ) : favorites.length === 0 ? (
                 <p>Sua lista de desejos está vazia.</p>
               ) : (
                 <ul>
-                  {favorites.slice(0, 4).map((item) => (
-                    <li key={item.productId}>
-                      <Link href={`/produto/${item.slug}`}>{item.name}</Link>
-                    </li>
-                  ))}
+                  {favorites.slice(0, 4).map((item) => {
+                    const product = favoriteProducts[item.productId];
+                    if (!product) return null;
+                    return (
+                      <li key={item.productId}>
+                        <Link href={`/produto/${product.id}`}>{product.title}</Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               <Link href="/minha-conta/favoritos">Ver favoritos</Link>

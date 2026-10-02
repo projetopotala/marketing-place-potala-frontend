@@ -99,27 +99,27 @@ export const ACCOUNT_HELP_FAQS = [
     category: "Pedidos",
     question: "Como acompanho meu pedido?",
     answer:
-      "Em Minha conta → Meus pedidos você encontra o status e a timeline demonstrativa.",
+      "Em Minha conta → Meus pedidos você encontra o status e o histórico do seu pedido.",
   },
   {
     id: "faq-2",
     category: "Entrega",
     question: "Qual o prazo de entrega?",
     answer:
-      "O prazo depende da modalidade escolhida no checkout. Sem backend, os prazos são ilustrativos.",
+      "O prazo exibido depende da modalidade de envio escolhida no checkout.",
   },
   {
     id: "faq-3",
     category: "Devoluções",
     question: "Posso devolver um produto?",
     answer:
-      "Pedidos com status Entregue podem abrir solicitação em Devoluções (fluxo demonstrativo local).",
+      "Pedidos com status Entregue podem abrir solicitação em Devoluções.",
   },
   {
     id: "faq-4",
     category: "Conta",
     question: "Esqueci minha senha",
     answer:
-      "Neste demo não há recuperação de senha. Em produção isso exige backend autenticado.",
+      "Para suporte relacionado ao acesso à sua conta, consulte os canais de contato do Instituto Potala disponíveis nesta página.",
   },
 ];
