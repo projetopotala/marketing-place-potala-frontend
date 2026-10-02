@@ -138,8 +138,8 @@ export default function AccountOrdersPage() {
           </div>
 
           <ul
-            className="md:hidden"
-            style={{ listStyle: "none", padding: 0, display: "grid", gap: 12 }}
+            className="md:hidden grid gap-3"
+            style={{ listStyle: "none", padding: 0 }}
           >
             {orders.map((order) => (
               <li
