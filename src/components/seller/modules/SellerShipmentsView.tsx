@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  confirmMySellerOrder,
   deliverMySellerOrder,
   listMySellerOrders,
   prepareMySellerOrder,
@@ -28,10 +27,13 @@ type NextAction = {
 };
 
 // Um passo por vez, nunca um status arbitrário — mesma trava que o
-// backend já aplica (409 fora de ordem). DELIVERED/CANCELLED são
-// terminais nesta v1, sem ação nenhuma.
+// backend já aplica (409 fora de ordem). PENDING não tem ação manual
+// (bug de produção, 02/10): PENDING -> CONFIRMED é exclusivo do fluxo de
+// pagamento aprovado (finalizeApprovedPayment, orders-service), nunca do
+// vendedor -- o backend agora rejeita isso incondicionalmente em
+// confirmForSeller, e esta tela para de oferecer o botão. DELIVERED/
+// CANCELLED são terminais nesta v1, sem ação nenhuma.
 const NEXT_ACTION: Partial<Record<SellerOrderStatus, NextAction>> = {
-  PENDING: { label: "Confirmar", run: confirmMySellerOrder },
   CONFIRMED: { label: "Iniciar preparo", run: prepareMySellerOrder },
   PREPARING: { label: "Marcar como enviado", run: shipMySellerOrder },
   SHIPPED: { label: "Marcar como entregue", run: deliverMySellerOrder },
