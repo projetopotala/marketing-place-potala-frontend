@@ -491,9 +491,16 @@
   }
 }
 
+/* Hotfix visual (06/10, pre-apresentacao): 3 colunas fixas aqui
+   deixavam um vao vazio quando uma tela tem so 4 metric-cards (ex.
+   Dashboard, resolucao 1366x768 da apresentacao) -- 3+1 na grade.
+   auto-fit ocupa a largura toda com qualquer quantidade de cards,
+   sem vao. Alterado SOMENTE este bloco (.metrics dentro de
+   max-width:1439px); a regra base (>1439px, 6 colunas) e os demais
+   breakpoints (1023px, 767px) continuam intocados. */
 @media (max-width: 1439px) {
   .metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   }
 }
 

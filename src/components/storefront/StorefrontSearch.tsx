@@ -25,6 +25,25 @@ import { SearchIcon } from "@/components/storefront/icons";
  * hotfix trazê-las de volta como um painel de autocomplete sem
  * overlay/backdrop — combinado com o Arthur como corte deliberado pra
  * manter a mudança mínima antes da apresentação de hoje.
+ *
+ * Decisão de UX (06/10, 3ª iteração): tentativas anteriores tentaram
+ * manter este campo como um "espelho" visual do filtro `q` aplicado,
+ * sincronizando com useSearchParams(). Evidência real de navegador provou
+ * que isso não se sustenta de forma confiável nesta instância (ela vive
+ * no layout persistente do header, StorefrontSearch nunca remonta entre
+ * navegações do storefront) -- e tentar perseguir cada navegação que
+ * precisa limpar esse "espelho" (Limpar filtros, trocar de categoria,
+ * etc.) expande o escopo indefinidamente, exatamente o que uma
+ * apresentação amanhã não permite arriscar.
+ *
+ * Decisão deliberada: este campo deixa de representar o filtro atual.
+ * É só uma caixa de ENTRADA -- digita, aperta Enter/lupa, navega para
+ * /catalogo?q=..., e o próprio campo volta a ficar vazio imediatamente
+ * após o submit. Quem mostra o filtro realmente aplicado é o campo de
+ * busca dentro do catálogo (CatalogToolbar, com seu próprio
+ * key={currentQuery}) -- esse sim é alimentado pelo Server Component da
+ * página e nunca fica desatualizado. Nenhum estado para sincronizar aqui
+ * significa nenhuma forma de ele ficar obsoleto.
  */
 export function StorefrontSearch() {
   const router = useRouter();
@@ -32,7 +51,10 @@ export function StorefrontSearch() {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    router.push(catalogHref({ q: query }));
+
+    const submittedQuery = query.trim();
+    router.push(catalogHref({ q: submittedQuery || undefined }));
+    setQuery("");
   }
 
   return (

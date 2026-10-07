@@ -130,6 +130,14 @@ export function CatalogToolbar({
             Buscar
           </label>
           <input
+            // Bug de produção (05/10): este input é não controlado
+            // (defaultValue), e a navegação do "Limpar filtros" troca a
+            // query string sem remontar este componente -- o valor digitado
+            // ficava "preso" no DOM mesmo depois da URL perder `q`. A key
+            // força o React a remontar o input sempre que currentQuery
+            // muda, sincronizando o campo visual com a URL/filtro
+            // efetivamente aplicado, sem converter o input para controlled.
+            key={currentQuery}
             id={searchId}
             name="q"
             type="search"

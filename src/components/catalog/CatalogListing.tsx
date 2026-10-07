@@ -4,10 +4,6 @@ import {
   type CatalogToolbarCategory,
 } from "@/components/catalog/CatalogToolbar";
 import { FadeIn } from "@/components/ui/motion/FadeIn";
-import {
-  StaggerContainer,
-  StaggerItem,
-} from "@/components/ui/motion/StaggerContainer";
 import type { ProductSortOrder } from "@/features/catalog/selectors";
 import type { Product } from "@/types/marketplace";
 import Link from "next/link";
@@ -126,13 +122,22 @@ export function CatalogListing({
           </Link>
         </div>
       ) : (
-        <StaggerContainer className="catalog-product-grid mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        // Bug de produção (06/10): StaggerContainer/StaggerItem (motion.div
+        // com variants hidden/show) podia ficar travado no estado inicial
+        // (opacity: 0, translateY(8px)) sem nunca completar a transição para
+        // "show" -- produto renderizado no DOM mas invisível. Causa raiz
+        // exata não fechada (ver investigação), mas a visibilidade do
+        // produto não pode depender de uma animação JS pós-hidratação
+        // terminar com sucesso. Trocado por <div> puro, sem nenhuma
+        // animação, só neste grid -- StaggerContainer.tsx continua intocado
+        // e usado normalmente em DashboardView.tsx (admin).
+        <div className="catalog-product-grid mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {products.map((product) => (
-            <StaggerItem key={product.id} className="h-full min-w-0">
+            <div key={product.id} className="h-full min-w-0">
               <ProductCard product={product} />
-            </StaggerItem>
+            </div>
           ))}
-        </StaggerContainer>
+        </div>
       )}
     </div>
   );

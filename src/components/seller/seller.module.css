@@ -180,6 +180,15 @@
   font-size: 1.15rem;
 }
 
+/* Hotfix visual (06/10, pre-apresentacao): overflow-x:auto na regra
+   base de .tableWrap -- antes so existia dentro do media query de
+   max-width:639px, entao uma tabela larga (ex. Estoque) podia forcar
+   overflow horizontal da pagina inteira em tablet/notebook (768-1023px).
+   Mantido tambem dentro do media query abaixo (redundante, sem risco). */
+.tableWrap {
+  overflow-x: auto;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -188,7 +197,7 @@
 
 .table th,
 .table td {
-  padding: 10px 8px;
+  padding: 12px 12px;
   border-bottom: 1px solid rgba(210, 165, 80, 0.12);
   text-align: left;
 }

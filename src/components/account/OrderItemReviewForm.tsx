@@ -17,6 +17,13 @@ interface OrderItemReviewFormProps {
  * em 29/09, ver reviews.service.ts) — este componente só cuida do formulário em si e devolve a avaliação criada
  * pro chamador atualizar o estado local (evita recarregar o pedido inteiro
  * só pra refletir uma avaliação nova).
+ *
+ * Polimento visual (06/10, pré-apresentação): só estilos inline e o texto
+ * do label da nota mudaram aqui -- nenhuma mudança de lógica. A nota
+ * continua um <select> nativo (1 a 5), não virou um picker de estrelas
+ * clicáveis (investigamos o "bug das estrelas cortadas" reportado e
+ * confirmamos que esse widget não existe neste componente -- ver nota no
+ * Claude Project).
  */
 export function OrderItemReviewForm({
   orderId,
@@ -58,20 +65,39 @@ export function OrderItemReviewForm({
       onSubmit={handleSubmit}
       style={{
         display: "grid",
-        gap: 8,
-        marginTop: 8,
-        padding: 12,
+        gap: 12,
+        marginTop: 12,
+        padding: 16,
+        background: "var(--potala-panel)",
         border: "1px solid var(--potala-border)",
-        borderRadius: 12,
+        borderRadius: "var(--potala-radius-control, 12px)",
         maxWidth: 420,
       }}
     >
-      <label style={{ display: "grid", gap: 4 }}>
-        Sua nota
+      <label
+        style={{
+          display: "grid",
+          gap: 6,
+          fontSize: "0.85rem",
+          fontWeight: 600,
+          color: "var(--potala-cream)",
+        }}
+      >
+        Sua nota (1 a 5)
         <select
           value={rating}
           onChange={(event) => setRating(Number(event.target.value))}
           disabled={isSubmitting}
+          style={{
+            minHeight: 44,
+            padding: "0 0.75rem",
+            border: "1px solid var(--potala-border)",
+            borderRadius: "var(--potala-radius-control, 10px)",
+            background: "var(--potala-bg)",
+            color: "var(--potala-text)",
+            fontSize: "0.9rem",
+            fontWeight: 400,
+          }}
         >
           {[5, 4, 3, 2, 1].map((value) => (
             <option key={value} value={value}>
@@ -80,7 +106,15 @@ export function OrderItemReviewForm({
           ))}
         </select>
       </label>
-      <label style={{ display: "grid", gap: 4 }}>
+      <label
+        style={{
+          display: "grid",
+          gap: 6,
+          fontSize: "0.85rem",
+          fontWeight: 600,
+          color: "var(--potala-cream)",
+        }}
+      >
         Comentário (opcional)
         <textarea
           value={comment}
@@ -88,15 +122,43 @@ export function OrderItemReviewForm({
           maxLength={2000}
           rows={3}
           disabled={isSubmitting}
-          style={{ width: "100%", resize: "vertical" }}
+          style={{
+            width: "100%",
+            resize: "vertical",
+            padding: "0.5rem 0.75rem",
+            border: "1px solid var(--potala-border)",
+            borderRadius: "var(--potala-radius-control, 10px)",
+            background: "var(--potala-bg)",
+            color: "var(--potala-text)",
+            fontSize: "0.9rem",
+            fontWeight: 400,
+          }}
         />
       </label>
       {error ? (
-        <p role="alert" style={{ color: "var(--potala-danger, #c95c57)", margin: 0 }}>
+        <p
+          role="alert"
+          style={{ color: "var(--potala-danger, #c95c57)", margin: 0, fontSize: "0.85rem" }}
+        >
           {error}
         </p>
       ) : null}
-      <button type="submit" disabled={isSubmitting} style={{ justifySelf: "start" }}>
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        style={{
+          justifySelf: "start",
+          padding: "0.6rem 1.25rem",
+          border: "none",
+          borderRadius: "var(--potala-radius-button, 8px)",
+          background: "var(--potala-gold)",
+          color: "var(--potala-bg)",
+          fontWeight: 600,
+          fontSize: "0.9rem",
+          cursor: isSubmitting ? "default" : "pointer",
+          opacity: isSubmitting ? 0.7 : 1,
+        }}
+      >
         {isSubmitting ? "Enviando…" : "Enviar avaliação"}
       </button>
     </form>

@@ -35,6 +35,11 @@ import { formatPrice } from "@/data/marketplace";
  * returns.service.ts no potala-orders-service; ver
  * roadmap-mercado-livre.md seção 6/8), e isso só existe no nível do
  * SellerOrder, não no item.
+ *
+ * Polimento visual (06/10, pré-apresentação): só espaçamento, divisores,
+ * títulos e agrupamento visual (estilos inline) foram ajustados nesta
+ * passada -- nenhuma condição de status, dado exibido, ou lógica de
+ * avaliação/devolução/API mudou.
  */
 export default function AccountOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -99,6 +104,19 @@ export default function AccountOrderDetailPage() {
     });
   }
 
+  const sectionHeadingStyle = {
+    margin: "0 0 12px",
+    fontSize: "1.05rem",
+    fontWeight: 600,
+    color: "var(--potala-gold)",
+  } as const;
+
+  const dividedSectionStyle = {
+    marginTop: 24,
+    paddingTop: 20,
+    borderTop: "1px solid var(--potala-border)",
+  } as const;
+
   return (
     <AccountChrome
       title={order ? `Pedido ${order.orderNumber}` : "Pedido"}
@@ -113,17 +131,44 @@ export default function AccountOrderDetailPage() {
         </p>
       ) : (
         <>
-          <p>
+          <p
+            style={{
+              margin: "0 0 20px",
+              padding: "10px 14px",
+              background: "var(--potala-panel)",
+              border: "1px solid var(--potala-border)",
+              borderRadius: "var(--potala-radius-control, 10px)",
+              color: "var(--potala-cream)",
+              fontSize: "0.95rem",
+            }}
+          >
             Status: {ORDER_STATUS_LABEL[order.status]} · Total{" "}
             {formatPrice(order.totalCents / 100)}
           </p>
 
           <section>
-            <h2>Itens</h2>
+            <h2 style={sectionHeadingStyle}>Itens</h2>
             {order.sellerOrders.map((sellerOrder) => (
-              <ul key={sellerOrder.id} style={{ marginBottom: 16 }}>
+              <ul
+                key={sellerOrder.id}
+                style={{
+                  listStyle: "none",
+                  margin: 0,
+                  padding: 0,
+                  display: "grid",
+                  gap: 12,
+                  marginBottom: 16,
+                }}
+              >
                 {sellerOrder.items.map((item) => (
-                  <li key={item.id} style={{ marginBottom: 12 }}>
+                  <li
+                    key={item.id}
+                    style={{
+                      border: "1px solid var(--potala-border)",
+                      borderRadius: "var(--potala-radius-control, 10px)",
+                      padding: 12,
+                    }}
+                  >
                     {item.productTitle} ({item.sku}) — {item.quantity}×{" "}
                     {formatPrice(item.unitPriceCents / 100)}
                     {sellerOrder.status === "DELIVERED" ? (
@@ -172,20 +217,41 @@ export default function AccountOrderDetailPage() {
             ))}
           </section>
 
-          <section>
-            <h2>Totais</h2>
-            <p>Subtotal {formatPrice(order.subtotalCents / 100)}</p>
-            {order.discountCents > 0 ? (
-              <p>Desconto -{formatPrice(order.discountCents / 100)}</p>
-            ) : null}
-            <p>Frete {formatPrice(order.shippingCents / 100)}</p>
-            <p>Total {formatPrice(order.totalCents / 100)}</p>
+          <section style={dividedSectionStyle}>
+            <h2 style={sectionHeadingStyle}>Totais</h2>
+            <div
+              style={{
+                display: "grid",
+                gap: 6,
+                padding: 12,
+                border: "1px solid var(--potala-border)",
+                borderRadius: "var(--potala-radius-control, 10px)",
+                maxWidth: 420,
+              }}
+            >
+              <p style={{ margin: 0 }}>Subtotal {formatPrice(order.subtotalCents / 100)}</p>
+              {order.discountCents > 0 ? (
+                <p style={{ margin: 0 }}>Desconto -{formatPrice(order.discountCents / 100)}</p>
+              ) : null}
+              <p style={{ margin: 0 }}>Frete {formatPrice(order.shippingCents / 100)}</p>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  paddingTop: 6,
+                  borderTop: "1px solid var(--potala-border)",
+                  fontWeight: 600,
+                  color: "var(--potala-cream)",
+                }}
+              >
+                Total {formatPrice(order.totalCents / 100)}
+              </p>
+            </div>
           </section>
 
-          <section>
-            <h2>Entrega</h2>
+          <section style={dividedSectionStyle}>
+            <h2 style={sectionHeadingStyle}>Entrega</h2>
             {order.shippingAddress ? (
-              <p>
+              <p style={{ margin: 0 }}>
                 {order.shippingAddress.street}, {order.shippingAddress.number}
                 {order.shippingAddress.complement
                   ? ` - ${order.shippingAddress.complement}`
@@ -195,13 +261,13 @@ export default function AccountOrderDetailPage() {
                 CEP {order.shippingAddress.postalCode}
               </p>
             ) : (
-              <p>Endereço não disponível.</p>
+              <p style={{ margin: 0 }}>Endereço não disponível.</p>
             )}
           </section>
 
-          <section>
-            <h2>Pagamento</h2>
-            <p>
+          <section style={{ ...dividedSectionStyle, marginBottom: 24 }}>
+            <h2 style={sectionHeadingStyle}>Pagamento</h2>
+            <p style={{ margin: 0 }}>
               {latestPayment
                 ? PAYMENT_TRANSACTION_STATUS_LABEL[latestPayment.status]
                 : "Sem transação registrada."}

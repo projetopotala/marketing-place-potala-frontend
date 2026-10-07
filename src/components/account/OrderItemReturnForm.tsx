@@ -18,6 +18,11 @@ interface OrderItemReturnFormProps {
  * formulário em si. Sem reembolso/reposição de estoque automáticos --
  * isto só registra o pedido de devolução, um admin decide depois (ver
  * comentário do model Return, orders-service).
+ *
+ * Polimento visual (06/10, pré-apresentação): mesmo tratamento visual de
+ * OrderItemReviewForm.tsx (label/input/textarea/botão), pra os dois
+ * formulários ficarem visualmente consistentes -- nenhuma mudança de
+ * lógica.
  */
 export function OrderItemReturnForm({
   orderId,
@@ -59,15 +64,24 @@ export function OrderItemReturnForm({
       onSubmit={handleSubmit}
       style={{
         display: "grid",
-        gap: 8,
-        marginTop: 8,
-        padding: 12,
+        gap: 12,
+        marginTop: 12,
+        padding: 16,
+        background: "var(--potala-panel)",
         border: "1px solid var(--potala-border)",
-        borderRadius: 12,
+        borderRadius: "var(--potala-radius-control, 12px)",
         maxWidth: 420,
       }}
     >
-      <label style={{ display: "grid", gap: 4 }}>
+      <label
+        style={{
+          display: "grid",
+          gap: 6,
+          fontSize: "0.85rem",
+          fontWeight: 600,
+          color: "var(--potala-cream)",
+        }}
+      >
         Motivo
         <input
           value={reason}
@@ -75,10 +89,27 @@ export function OrderItemReturnForm({
           maxLength={200}
           required
           disabled={isSubmitting}
-          style={{ minHeight: 44 }}
+          style={{
+            minHeight: 44,
+            padding: "0 0.75rem",
+            border: "1px solid var(--potala-border)",
+            borderRadius: "var(--potala-radius-control, 10px)",
+            background: "var(--potala-bg)",
+            color: "var(--potala-text)",
+            fontSize: "0.9rem",
+            fontWeight: 400,
+          }}
         />
       </label>
-      <label style={{ display: "grid", gap: 4 }}>
+      <label
+        style={{
+          display: "grid",
+          gap: 6,
+          fontSize: "0.85rem",
+          fontWeight: 600,
+          color: "var(--potala-cream)",
+        }}
+      >
         Descrição (opcional)
         <textarea
           value={description}
@@ -86,15 +117,43 @@ export function OrderItemReturnForm({
           maxLength={2000}
           rows={3}
           disabled={isSubmitting}
-          style={{ width: "100%", resize: "vertical" }}
+          style={{
+            width: "100%",
+            resize: "vertical",
+            padding: "0.5rem 0.75rem",
+            border: "1px solid var(--potala-border)",
+            borderRadius: "var(--potala-radius-control, 10px)",
+            background: "var(--potala-bg)",
+            color: "var(--potala-text)",
+            fontSize: "0.9rem",
+            fontWeight: 400,
+          }}
         />
       </label>
       {error ? (
-        <p role="alert" style={{ color: "var(--potala-danger, #c95c57)", margin: 0 }}>
+        <p
+          role="alert"
+          style={{ color: "var(--potala-danger, #c95c57)", margin: 0, fontSize: "0.85rem" }}
+        >
           {error}
         </p>
       ) : null}
-      <button type="submit" disabled={isSubmitting} style={{ justifySelf: "start" }}>
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        style={{
+          justifySelf: "start",
+          padding: "0.6rem 1.25rem",
+          border: "none",
+          borderRadius: "var(--potala-radius-button, 8px)",
+          background: "var(--potala-gold)",
+          color: "var(--potala-bg)",
+          fontWeight: 600,
+          fontSize: "0.9rem",
+          cursor: isSubmitting ? "default" : "pointer",
+          opacity: isSubmitting ? 0.7 : 1,
+        }}
+      >
         {isSubmitting ? "Enviando…" : "Solicitar devolução"}
       </button>
     </form>
