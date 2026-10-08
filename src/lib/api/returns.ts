@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import type { DisputeSummary } from "./disputes";
 
 /**
  * Devoluções -- pedido de Arthur ("vamos seguir em frente"), mesma rodada
@@ -10,14 +11,39 @@ import { apiFetch } from "./client";
  * (admin, mediador -- ver comentário do model Return no schema.prisma
  * do orders-service pra por que não há reembolso/reposição de estoque
  * automáticos nesta v1).
+ *
+ * ReturnStatus sincronizado com os 10 valores reais do Prisma (`enum
+ * ReturnStatus`, schema.prisma) -- antes só modelava 3
+ * (REQUESTED/APPROVED/REJECTED); os outros 7 já podem ser escritos pelo
+ * backend hoje (CONTESTED, em particular, nasce de
+ * DisputesService.openFromReturnOrigin, já em produção), então o drift
+ * anterior já era um risco ativo, não hipotético (ver
+ * claude/diagnostico-frontend-pos-venda.md, seção 4).
  */
 
-export type ReturnStatus = "REQUESTED" | "APPROVED" | "REJECTED";
+export type ReturnStatus =
+  | "REQUESTED"
+  | "APPROVED"
+  | "REJECTED"
+  | "AWAITING_SHIPMENT"
+  | "SHIPPED"
+  | "RECEIVED"
+  | "UNDER_REVIEW"
+  | "COMPLETED"
+  | "CONTESTED"
+  | "CANCELLED";
 
 export const RETURN_STATUS_LABEL: Record<ReturnStatus, string> = {
   REQUESTED: "Solicitado",
   APPROVED: "Aprovado",
   REJECTED: "Rejeitado",
+  AWAITING_SHIPMENT: "Aguardando envio",
+  SHIPPED: "Enviado",
+  RECEIVED: "Recebido pelo vendedor",
+  UNDER_REVIEW: "Em análise",
+  COMPLETED: "Concluído",
+  CONTESTED: "Em disputa",
+  CANCELLED: "Cancelado",
 };
 
 export interface ReturnResponse {
@@ -37,6 +63,16 @@ export interface ReturnResponse {
  * Forma de linha das listas (cliente e admin) -- inclui um resumo do
  * OrderItem/pedido pai (`orderItem.select` no returns.service.ts),
  * nunca o objeto completo. `sku` só vem na listagem do admin.
+ *
+ * `dispute` é o resumo opcional retornado pelo backend
+ * (`ReturnsService.listForCustomer/listForAdmin/listForSeller/
+ * getForSeller`, `dispute: {select: {id,status,outcome,openedAt,
+ * resolvedAt}}`) -- `null` enquanto a devolução não tiver sido contestada
+ * (nunca `undefined`: o backend sempre inclui a chave `dispute` nestas
+ * respostas, mesmo sem disputa aberta). Tipo compartilhado com claims.ts,
+ * definido em disputes.ts. `createReturn`/`approveReturn`/`rejectReturn`
+ * NUNCA trazem este campo (ver `ReturnResponse` acima, sem `dispute`) --
+ * `ReturnsService.createReturn`/`decide` não fazem nenhum include.
  */
 export interface ReturnListItemResponse extends ReturnResponse {
   orderItem: {
@@ -44,6 +80,7 @@ export interface ReturnListItemResponse extends ReturnResponse {
     sku?: string;
     sellerOrder: { order: { orderNumber: string } };
   };
+  dispute: DisputeSummary | null;
 }
 
 export interface PageInfo {
