@@ -13,6 +13,7 @@ import {
   LogOut,
   Undo2,
   HelpCircle,
+  MessageSquareWarning,
   type LucideIcon,
 } from "lucide-react";
 import { ACCOUNT_SIDEBAR_ITEMS } from "@/data/account";
@@ -27,6 +28,7 @@ const ICONS: Record<string, LucideIcon> = {
   resumo: LayoutDashboard,
   pedidos: Package,
   devolucoes: Undo2,
+  reclamacoes: MessageSquareWarning,
   enderecos: MapPin,
   favoritos: Heart,
   avaliacoes: Star,

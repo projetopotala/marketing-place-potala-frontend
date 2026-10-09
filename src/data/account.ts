@@ -20,6 +20,12 @@ export const ACCOUNT_SIDEBAR_ITEMS: AccountSidebarItem[] = [
     available: true,
   },
   {
+    id: "reclamacoes",
+    label: "Reclamações",
+    href: "/minha-conta/reclamacoes",
+    available: true,
+  },
+  {
     id: "enderecos",
     label: "Endereços",
     href: "/minha-conta/enderecos",
