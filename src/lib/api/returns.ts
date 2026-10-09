@@ -7,10 +7,22 @@ import type { DisputeSummary } from "./disputes";
  * Project). Client for potala-orders-service's Return endpoints, através
  * do gateway: `POST /orders/:orderId/items/:itemId/return` (cliente),
  * `GET /orders/returns` (cliente, "Solicitações" da própria conta),
- * `GET /admin/returns` + `PATCH /admin/returns/:id/(approve|reject)`
- * (admin, mediador -- ver comentário do model Return no schema.prisma
- * do orders-service pra por que não há reembolso/reposição de estoque
- * automáticos nesta v1).
+ * `GET /seller/returns(/:id)` (vendedor, leitura -- F3, pós-venda do
+ * vendedor), `GET /admin/returns` + `PATCH /admin/returns/:id/
+ * (approve|reject)` (admin, mediador -- ver comentário do model Return no
+ * schema.prisma do orders-service pra por que não há reembolso/reposição
+ * de estoque automáticos nesta v1).
+ *
+ * SELLER SÓ LÊ: confirmado em `SellerReturnsController`
+ * (potala-orders-service) -- "SOMENTE LEITURA: não existe aqui, de
+ * propósito, nenhuma operação de aprovação/rejeição de Return para o
+ * SELLER". Por isso só `listMySellerReturns` existe abaixo, nenhuma
+ * escrita -- aprovar/rejeitar continua exclusivo do ADMIN
+ * (approveReturn/rejectReturn, já definidos mais abaixo). Abrir uma
+ * Dispute a partir de uma Return do vendedor (`POST
+ * seller/returns/:id/dispute`) mora em disputes.ts
+ * (`openMySellerReturnDispute`), não aqui -- mesmo raciocínio já usado
+ * pra CUSTOMER/Claim neste arquivo.
  *
  * ReturnStatus sincronizado com os 10 valores reais do Prisma (`enum
  * ReturnStatus`, schema.prisma) -- antes só modelava 3
@@ -83,6 +95,19 @@ export interface ReturnListItemResponse extends ReturnResponse {
   dispute: DisputeSummary | null;
 }
 
+/**
+ * `GET /seller/returns/:id` (`ReturnsService.getForSeller`) devolve esta
+ * mesma forma -- confirmado lendo o service antes de escrever o client:
+ * mesmo `include` de `orderItem`/`dispute` que `listForSeller` usa, sem
+ * `sku` (só a listagem do ADMIN inclui `sku`, ver comentário acima).
+ * Não há client function pra este GET por id nesta rodada: a tela de
+ * devoluções do vendedor (mesma decisão de design já tomada pra
+ * devoluções do cliente) mostra tudo que existe -- produto, pedido,
+ * status, motivo e resumo de disputa -- direto na listagem, sem
+ * necessidade de uma segunda tela de detalhe; ver
+ * SellerReturnsView.tsx/relatório F3.
+ */
+
 export interface PageInfo {
   hasNextPage: boolean;
   nextCursor: string | null;
@@ -140,6 +165,30 @@ export async function listMyReturns(params?: {
   );
   return result ?? EMPTY_PAGE;
 }
+
+// ---------------------------------------------------------------------------
+// SELLER -- somente leitura (ver comentário no topo do arquivo). Nenhuma
+// operação de aprovação/rejeição aqui -- isso continua exclusivo do ADMIN.
+// ---------------------------------------------------------------------------
+
+/** GET /seller/returns -- devoluções recebidas pela própria loja, paginadas por cursor. */
+export async function listMySellerReturns(params?: {
+  limit?: number;
+  cursor?: string | null;
+}): Promise<Paginated<ReturnListItemResponse>> {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.cursor) query.set("cursor", params.cursor);
+  const qs = query.toString();
+  const result = await apiFetch<Paginated<ReturnListItemResponse>>(
+    `/seller/returns${qs ? `?${qs}` : ""}`,
+  );
+  return result ?? EMPTY_PAGE;
+}
+
+// ---------------------------------------------------------------------------
+// ADMIN
+// ---------------------------------------------------------------------------
 
 /** GET /admin/returns -- todas as solicitações, de qualquer loja, paginadas por cursor. */
 export async function listAdminReturns(params?: {

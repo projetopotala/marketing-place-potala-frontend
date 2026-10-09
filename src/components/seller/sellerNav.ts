@@ -12,6 +12,7 @@ import {
   Star,
   Settings,
   PlusCircle,
+  LifeBuoy,
 } from "lucide-react";
 
 export const SELLER_ICON_STROKE = 1.65;
@@ -45,6 +46,18 @@ export const SELLER_NAVIGATION: SellerNavItem[] = [
     href: "/loja/pedidos",
     icon: ShoppingBag,
     match: matchPath("/loja/pedidos"),
+  },
+  {
+    // F3 -- pós-venda do vendedor (reclamações recebidas, devoluções,
+    // disputas vinculadas). Rota própria, sem sobreposição com
+    // "/loja/pedidos" acima -- matchPath usa startsWith, então
+    // "/loja/pos-venda" nunca é confundido com "/loja/pedidos" (prefixos
+    // literais distintos).
+    id: "pos-venda",
+    label: "Pós-venda",
+    href: "/loja/pos-venda",
+    icon: LifeBuoy,
+    match: matchPath("/loja/pos-venda"),
   },
   {
     id: "produtos",
