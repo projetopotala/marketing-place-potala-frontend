@@ -108,6 +108,8 @@ export function AdminConfirmDialog({
   busy = false,
   onConfirm,
   onClose,
+  controlledClose = false,
+  error = null,
 }: {
   open: boolean;
   title: string;
@@ -116,12 +118,62 @@ export function AdminConfirmDialog({
   busy?: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  /**
+   * F4.3 -- AlertDialog.Action é, por baixo, exatamente
+   * DialogPrimitive.Close (confirmado lendo @radix-ui/react-alert-dialog/
+   * src/alert-dialog.tsx e @radix-ui/react-dialog/dist/index.mjs): seu
+   * onClick é sempre composeEventHandlers(props.onClick, () =>
+   * context.onOpenChange(false)), que fecha o diálogo de forma SÍNCRONA
+   * assim que o onClick retorna -- mesmo quando ele só dispara uma
+   * Promise em voo (`onConfirm={() => void confirmarAlgo()}`), ou seja,
+   * antes da requisição HTTP terminar.
+   *
+   * Por padrão (`controlledClose = false`) o comportamento é IDÊNTICO ao
+   * de antes desta revisão, preservando every consumidor existente
+   * (CouponsView, CustomersView, ProductsView, ReturnsView, SellersView,
+   * SellerDetailView, CustomerDetailView, SettingsView,
+   * TransactionDetailView): nenhum deles passa esta prop, então nenhum
+   * tem seu comportamento alterado.
+   *
+   * Quando true, suprime esse fechamento automático com
+   * `event.preventDefault()` no clique de "Confirmar" -- só o consumidor
+   * decide quando fechar (normalmente: ao suceder, limpando o estado
+   * "pendente"; ao falhar, mantendo o diálogo aberto para mostrar o
+   * erro). "Cancelar" também fica desabilitado enquanto `busy`, pelo
+   * mesmo motivo que "Confirmar" já era: evitar fechar/cancelar o
+   * diálogo com uma operação em andamento.
+   */
+  controlledClose?: boolean;
+  /**
+   * F4.3 -- erro a exibir dentro do próprio diálogo. Só tem efeito
+   * prático combinado com controlledClose=true: sem ele, o diálogo já
+   * teria fechado (pelo Radix) antes de qualquer erro poder aparecer, e
+   * o texto apareceria atrás do backdrop. Opcional, `null` por padrão --
+   * sem efeito nos consumidores existentes.
+   */
+  error?: string | null;
 }) {
   return (
     <AlertDialog.Root
       open={open}
       onOpenChange={(next) => {
-        if (!next) onClose();
+        if (next) return;
+        // F4.4 -- proteção residual: onOpenChange(false) não chega só pelo
+        // clique em "Cancelar" (que já fica disabled={controlledClose &&
+        // busy}) -- a tecla Escape passa pelo MESMO onOpenChange por um
+        // caminho totalmente separado. Confirmado lendo
+        // @radix-ui/react-dismissable-layer/dist/index.mjs: o listener de
+        // keydown do próprio documento chama onDismiss() (== context.
+        // onOpenChange(false)) sempre que a tecla é Escape e nenhum
+        // onEscapeKeyDown a tiver prevenido -- e AlertDialogContent só
+        // previne onPointerDownOutside/onInteractOutside, nunca Escape.
+        // Sem esta guarda, Escape fecharia o diálogo controlado mesmo com
+        // uma operação em andamento, ignorando a mesma proteção que já
+        // existe para "Cancelar". Só se aplica quando controlledClose=true
+        // E busy=true -- os 9 consumidores que não passam controlledClose
+        // continuam fechando com Escape exatamente como antes.
+        if (controlledClose && busy) return;
+        onClose();
       }}
     >
       <AlertDialog.Portal>
@@ -134,9 +186,22 @@ export function AdminConfirmDialog({
             <AlertDialog.Description className={styles.dialogBody}>
               {description}
             </AlertDialog.Description>
+            {error ? (
+              <p
+                role="alert"
+                style={{ color: "var(--potala-danger, #c95c57)", marginTop: 8 }}
+              >
+                {error}
+              </p>
+            ) : null}
             <div className={styles.dialogActions}>
               <AlertDialog.Cancel asChild>
-                <button type="button" className={styles.btnGhost} onClick={onClose}>
+                <button
+                  type="button"
+                  className={styles.btnGhost}
+                  disabled={controlledClose && busy}
+                  onClick={onClose}
+                >
                   Cancelar
                 </button>
               </AlertDialog.Cancel>
@@ -145,7 +210,15 @@ export function AdminConfirmDialog({
                   type="button"
                   className={styles.btnDanger}
                   disabled={busy}
-                  onClick={onConfirm}
+                  onClick={(event) => {
+                    if (controlledClose) {
+                      // Suprime o fechamento automático do Radix -- só o
+                      // consumidor (via onClose/estado "pendente") decide
+                      // quando este diálogo realmente fecha.
+                      event.preventDefault();
+                    }
+                    onConfirm();
+                  }}
                 >
                   {confirmLabel}
                 </button>

@@ -17,6 +17,7 @@ import {
   Plug,
   HandCoins,
   LogOut,
+  LifeBuoy,
 } from "lucide-react";
 import { ADMIN_NAV, type AdminNavItem } from "@/data/admin";
 
@@ -58,6 +59,7 @@ const ICON_BY_ID: Record<string, LucideIcon> = {
   "fin-integracoes": Plug,
   "fin-repasses": HandCoins,
   clientes: Users,
+  "pos-venda": LifeBuoy,
   conteudos: BookOpen,
   relatorios: ChartNoAxesCombined,
   configuracoes: Settings,
