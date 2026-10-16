@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import type { CheckoutPaymentMethod, CurrentOrderSummary, ShippingOptionId } from "@/types/cart";
 import { calcLineTotal, ORDER_STORAGE_KEY, PAYMENT_LABELS, SHIPPING_OPTIONS } from "@/data/cart";
 import { formatPrice } from "@/data/marketplace";
@@ -11,8 +11,16 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useAccountData } from "@/features/account/AccountDataContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
-import { checkout as checkoutApi, type OrderResponse } from "@/lib/api/orders";
+import { checkout as checkoutApi, type CheckoutInput, type OrderResponse } from "@/lib/api/orders";
 import { ApiError } from "@/lib/api/client";
+import {
+  browserCheckoutAttemptStorage,
+  checkoutFingerprint,
+  clearCheckoutAttempt,
+  resumeCheckoutAttempt,
+  shouldKeepCheckoutAttemptAfterError,
+  type CheckoutAttempt,
+} from "@/lib/api/checkoutIdempotency";
 import styles from "./page.module.css";
 
 interface FormErrors {
@@ -106,6 +114,9 @@ function CheckoutForm() {
   } = useAccountData();
   const formId = useId();
   const [submitting, setSubmitting] = useState(false);
+  // F2.1 -- tentativa de compra em curso (chave de idempotência + payload).
+  // Sobrevive a falhas e novos cliques; some ao concluir ou ao recarregar.
+  const checkoutAttemptRef = useRef<CheckoutAttempt | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -202,36 +213,56 @@ function CheckoutForm() {
       state: state.trim().toUpperCase(),
     };
 
+    // Preço/título/SKU nunca vêm daqui — o servidor resolve tudo a
+    // partir de productId/variantId (ver CreateCheckoutDto no
+    // orders-service).
+    const checkoutInput: CheckoutInput = {
+      items: items.map((item) => ({
+        productId: item.productId,
+        variantId: item.variantId,
+        quantity: item.quantity,
+      })),
+      shippingAddress: {
+        recipient: fullName.trim(),
+        street: street.trim(),
+        number: number.trim(),
+        complement: complement.trim() || undefined,
+        neighborhood: neighborhood.trim(),
+        city: city.trim(),
+        state: state.trim().toUpperCase(),
+        postalCode: cep.trim(),
+      },
+      // Backend valida (código, janela de vigência, habilitado) e
+      // rejeita o checkout inteiro com uma mensagem clara se inválido
+      // (CouponsService.resolveForCheckout, orders-service) -- ver
+      // status-migracao-microservicos.md. Omitido quando vazio: o campo
+      // é opcional, sem cupom nenhum aplicado.
+      ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
+    };
+    // F2.1 -- mesma compra (mesmo payload) => mesma Idempotency-Key, então
+    // um novo clique depois de falha de rede, 409 ou 5xx (ex.: gateway
+    // respondeu 503 enquanto o orders-service ainda criava o pedido) recebe
+    // o pedido já criado em vez de criar outro. Payload alterado => nova
+    // chave. O guard `submitting` continua evitando o duplo clique.
+    // P-3: a tentativa também fica na sessionStorage da aba (só chave +
+    // hash de usuário/payload + validade), então um refresh depois de um
+    // resultado incerto reaproveita a mesma chave; outro usuário, outro
+    // payload ou tentativa expirada => nova chave.
+    const attemptStorage = browserCheckoutAttemptStorage();
+    const attempt = resumeCheckoutAttempt({
+      memory: checkoutAttemptRef.current,
+      storage: attemptStorage,
+      fingerprint: checkoutFingerprint(user?.userId, checkoutInput),
+      now: Date.now(),
+    });
+    checkoutAttemptRef.current = attempt;
+
     try {
-      // Preço/título/SKU nunca vêm daqui — o servidor resolve tudo a
-      // partir de productId/variantId (ver CreateCheckoutDto no
-      // orders-service). Sem chave de idempotência nesta v1: um retry de
-      // rede cria um pedido novo — o guard `submitting` acima evita o caso
-      // mais comum (duplo clique), mas não uma falha de rede a meio do
-      // caminho (gap conhecido, ver status do projeto).
-      const response = await checkoutApi({
-        items: items.map((item) => ({
-          productId: item.productId,
-          variantId: item.variantId,
-          quantity: item.quantity,
-        })),
-        shippingAddress: {
-          recipient: fullName.trim(),
-          street: street.trim(),
-          number: number.trim(),
-          complement: complement.trim() || undefined,
-          neighborhood: neighborhood.trim(),
-          city: city.trim(),
-          state: state.trim().toUpperCase(),
-          postalCode: cep.trim(),
-        },
-        // Backend valida (código, janela de vigência, habilitado) e
-        // rejeita o checkout inteiro com uma mensagem clara se inválido
-        // (CouponsService.resolveForCheckout, orders-service) -- ver
-        // status-migracao-microservicos.md. Omitido quando vazio: o campo
-        // é opcional, sem cupom nenhum aplicado.
-        ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
+      const response = await checkoutApi(checkoutInput, {
+        idempotencyKey: attempt?.key,
       });
+      checkoutAttemptRef.current = null;
+      clearCheckoutAttempt(attemptStorage);
 
       const canonicalOrder = buildOrderSummaryFromResponse(response, {
         cartItemsByProductId,
@@ -266,10 +297,16 @@ function CheckoutForm() {
       router.push("/checkout/sucesso");
     } catch (err) {
       setSubmitting(false);
+      if (err instanceof ApiError && !shouldKeepCheckoutAttemptAfterError(err.status)) {
+        checkoutAttemptRef.current = null;
+        clearCheckoutAttempt(attemptStorage);
+      }
       setStatus(
-        err instanceof ApiError
-          ? err.message
-          : "Não foi possível finalizar o pedido. Tente novamente.",
+        err instanceof ApiError && err.status === 409 && err.message.includes("Idempotency-Key")
+          ? "Seu pedido ainda está sendo processado. Aguarde alguns segundos e tente novamente."
+          : err instanceof ApiError
+            ? err.message
+            : "Não foi possível finalizar o pedido. Tente novamente.",
       );
     }
   }

@@ -182,14 +182,22 @@ export interface OrderResponse {
  * aprovado por si só (embora o gateway mock desta v1 sempre aprove) — o
  * `status` da resposta é que diz o estado real.
  *
- * Sem chave de idempotência: um retry de rede neste endpoint cria um
- * pedido novo, distinto. O chamador deve evitar disparar duas vezes
- * enquanto uma chamada está em voo (ver `submitting` em checkout/page.tsx).
+ * F2.1 -- `idempotencyKey` (opcional) vai no header `Idempotency-Key`: a
+ * mesma chave com o mesmo payload nunca cria um segundo pedido (o servidor
+ * devolve o pedido já criado ou o mesmo erro). Uma chave por tentativa de
+ * compra -- ver lib/api/checkoutIdempotency.ts. Sem a chave, cada chamada
+ * é um pedido novo (comportamento anterior).
  */
-export async function checkout(input: CheckoutInput): Promise<OrderResponse> {
+export async function checkout(
+  input: CheckoutInput,
+  options: { idempotencyKey?: string } = {},
+): Promise<OrderResponse> {
   const result = await apiFetch<OrderResponse>("/orders/checkout", {
     method: "POST",
     body: JSON.stringify(input),
+    ...(options.idempotencyKey
+      ? { headers: { "Idempotency-Key": options.idempotencyKey } }
+      : {}),
   });
   if (!result) {
     throw new Error("Resposta vazia do servidor.");
