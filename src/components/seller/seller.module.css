@@ -270,7 +270,7 @@
 .primaryBtn {
   border: 1px solid var(--seller-gold);
   background: var(--seller-gold);
-  color: var(--potala-navy-950);
+  color: var(--potala-text-primary);
 }
 
 .ghostBtn {

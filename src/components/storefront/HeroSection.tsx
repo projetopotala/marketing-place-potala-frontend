@@ -7,7 +7,7 @@ export function HeroSection() {
   return (
     <section
       aria-labelledby="hero-title"
-      className="relative isolate overflow-hidden border-b border-potala-border"
+      className="potala-hero relative isolate overflow-hidden border-b border-potala-border"
     >
       <Image
         src="/images/potala/hero-bg-v2.png"

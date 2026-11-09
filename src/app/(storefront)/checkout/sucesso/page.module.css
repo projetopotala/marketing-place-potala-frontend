@@ -164,7 +164,7 @@
 
 .primaryBtn {
   background: linear-gradient(180deg, var(--potala-gold-light), var(--potala-gold));
-  color: var(--potala-bg);
+  color: var(--potala-text-primary);
 }
 
 .secondaryBtn {

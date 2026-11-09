@@ -5,19 +5,19 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Escala navy / dourado — fonte única Potala */
-  --potala-navy-950: #041020;
-  --potala-navy-900: #041126;
-  --potala-navy-850: #061426;
-  --potala-navy-800: #0b1d33;
-  --potala-navy-750: #10243d;
-  --potala-navy-700: #071a32;
+  /* Paleta areia. Os nomes legados preservam os consumidores existentes. */
+  --potala-navy-950: #cfb381;
+  --potala-navy-900: #e7d3ac;
+  --potala-navy-850: #dfc79e;
+  --potala-navy-800: #efdfbf;
+  --potala-navy-750: #f3e5c9;
+  --potala-navy-700: #d9c197;
 
   --potala-gold-500: #d5a64f;
   --potala-gold-400: #e8c878;
 
-  --potala-text-primary: #f5efe2;
-  --potala-text-secondary: #91a2b8;
+  --potala-text-primary: #35332f;
+  --potala-text-secondary: #686157;
 
   --potala-border: rgba(210, 165, 80, 0.22);
   --potala-border-strong: rgba(210, 165, 80, 0.45);
@@ -25,7 +25,7 @@
   --potala-success: #65b96e;
   --potala-warning: #d6a746;
   --potala-danger: #c95c57;
-  --potala-info: #6ea8d8;
+  --potala-info: #8b7d69;
 
   --font-display: var(--font-potala-serif);
   --font-body: var(--font-potala-sans);
@@ -85,7 +85,7 @@
   --potala-radius-button: var(--radius-sm);
   --potala-container-max: var(--content-max);
 
-  /* shadcn → Potala (site dark por padrão, sem depender de .dark) */
+  /* shadcn utiliza a paleta Potala definida acima. */
   --background: var(--potala-navy-900);
   --foreground: var(--potala-text-primary);
   --card: var(--potala-navy-800);
@@ -93,7 +93,7 @@
   --popover: var(--potala-navy-750);
   --popover-foreground: var(--potala-text-primary);
   --primary: var(--potala-gold-500);
-  --primary-foreground: var(--potala-navy-950);
+  --primary-foreground: var(--potala-text-primary);
   --secondary: var(--potala-navy-700);
   --secondary-foreground: var(--potala-text-primary);
   --muted: var(--potala-navy-800);
@@ -105,14 +105,14 @@
   --input: var(--potala-border);
   --ring: var(--potala-gold-500);
   --chart-1: #d5a64f;
-  --chart-2: #6ea8d8;
+  --chart-2: #b5a58b;
   --chart-3: #65b96e;
   --chart-4: #9b7ed8;
   --chart-5: #d98952;
   --sidebar: var(--potala-navy-950);
   --sidebar-foreground: var(--potala-text-primary);
   --sidebar-primary: var(--potala-gold-500);
-  --sidebar-primary-foreground: var(--potala-navy-950);
+  --sidebar-primary-foreground: var(--potala-text-primary);
   --sidebar-accent: rgba(213, 166, 79, 0.12);
   --sidebar-accent-foreground: var(--potala-gold-500);
   --sidebar-border: var(--potala-border);
@@ -280,8 +280,9 @@ img {
 }
 
 .potala-section-cream {
-  background: var(--potala-cream);
-  color: var(--potala-bg);
+  --potala-bg: #35332f;
+  background: #ecdbb9;
+  color: var(--potala-text-primary);
 }
 
 .featured-categories-container {
@@ -328,7 +329,7 @@ img {
   overflow: hidden;
   border: 1px solid rgba(213, 165, 79, 0.22);
   border-radius: 0.7rem;
-  background: #071a32;
+  background: var(--potala-bg-secondary);
   box-shadow: 0 8px 22px rgba(3, 17, 38, 0.16);
   text-decoration: none;
   transition:
@@ -341,7 +342,7 @@ img {
   position: relative;
   aspect-ratio: 1 / 0.72;
   overflow: hidden;
-  background: #071a32;
+  background: var(--potala-bg-secondary);
 }
 
 .featured-category-caption {
@@ -351,8 +352,8 @@ img {
   padding: 0.7rem 0.75rem 0.85rem;
   background: linear-gradient(
     180deg,
-    rgb(7 26 50 / 96%) 0%,
-    rgb(4 17 38 / 98%) 100%
+    rgb(226 207 171 / 96%) 0%,
+    rgb(239 223 191 / 98%) 100%
   );
 }
 
@@ -465,7 +466,7 @@ img {
 
 .potala-btn-primary {
   background: linear-gradient(180deg, var(--potala-gold-light), var(--potala-gold));
-  color: var(--potala-bg);
+  color: var(--potala-text-primary);
 }
 
 .potala-btn-primary:hover {
@@ -499,7 +500,7 @@ img {
   min-height: 3.25rem;
   border: 1px solid var(--potala-border);
   border-radius: var(--potala-radius-control);
-  background: #020b18;
+  background: var(--potala-panel);
   color: var(--potala-text);
   padding: 0.75rem 1.15rem;
   font: inherit;
@@ -564,7 +565,7 @@ img {
 }
 
 .featured-product-card {
-  background: #0b1e38;
+  background: var(--potala-panel);
   border: 1px solid rgba(213, 165, 79, 0.22);
   border-radius: 0.55rem;
   box-shadow: 0 8px 20px rgba(3, 17, 38, 0.18);
@@ -629,7 +630,7 @@ img {
   height: 2.5rem;
   border-radius: 999px;
   border: 1px solid rgba(213, 165, 79, 0.5);
-  background: rgb(4 17 38 / 72%);
+  background: rgb(239 223 191 / 92%);
   color: var(--potala-gold);
   cursor: pointer;
   transition:
@@ -639,7 +640,7 @@ img {
 }
 
 .featured-products-nav:hover:not(:disabled) {
-  background: rgb(4 17 38 / 88%);
+  background: rgb(226 207 171 / 96%);
   border-color: var(--potala-gold-light);
   color: var(--potala-gold-light);
 }
@@ -670,7 +671,7 @@ img {
 }
 
 .discovery-section {
-  background: #f4ecde;
+  background: #e8d5ae;
   padding-block: 2.75rem;
 }
 
@@ -757,6 +758,30 @@ img {
 
 .discovery-compact-card {
   min-width: 0;
+  height: 100%;
+  padding: 0.7rem;
+  border: 1px solid rgb(114 80 29 / 30%);
+  border-radius: 0.75rem;
+  background: #f3e3bf;
+  box-shadow: 0 4px 12px rgb(93 67 28 / 12%);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.discovery-compact-card:hover,
+.discovery-compact-card:focus-visible {
+  border-color: #967039;
+  box-shadow: 0 8px 20px rgb(93 67 28 / 20%);
+}
+
+.discovery-compact-card h4 {
+  margin-top: 0.85rem;
+  font-size: 0.95rem;
+}
+
+.discovery-compact-card h4 + p {
+  margin-top: 0.7rem;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .discovery-side-control {
@@ -769,8 +794,8 @@ img {
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 999px;
-  background: #ebe3d4;
-  color: var(--potala-bg);
+  background: #dec8a1;
+  color: var(--potala-text-primary);
   box-shadow: 0 2px 8px rgb(4 17 38 / 8%);
   transform: translateY(-50%);
   pointer-events: none;
@@ -824,7 +849,7 @@ img {
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(ellipse 55% 80% at 50% 50%, #0a1c36 0%, var(--potala-bg) 72%),
+    radial-gradient(ellipse 55% 80% at 50% 50%, var(--potala-panel) 0%, var(--potala-bg) 72%),
     var(--potala-bg);
 }
 
@@ -1193,8 +1218,8 @@ img {
   padding: 0.7rem 0.95rem;
   border: 1px solid rgb(213 165 79 / 45%);
   border-radius: 0.3125rem;
-  background: #f5f0e8;
-  color: var(--potala-bg);
+  background: #efdfc0;
+  color: var(--potala-text-primary);
   font-size: 0.875rem;
 }
 
@@ -1219,7 +1244,7 @@ img {
   border: 0;
   border-radius: 0.3125rem;
   background: linear-gradient(180deg, var(--potala-gold-light), var(--potala-gold));
-  color: var(--potala-bg);
+  color: var(--potala-text-primary);
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -1349,7 +1374,7 @@ img {
 
 /* —— Footer —— */
 .marketplace-footer {
-  background: #031326;
+  background: var(--potala-bg-secondary);
   border-top: 1px solid rgb(213 165 79 / 14%);
   color: var(--potala-text);
 }
@@ -1389,7 +1414,7 @@ img {
   max-width: 16.875rem;
   font-size: 0.8125rem;
   line-height: 1.55;
-  color: rgb(245 241 232 / 68%);
+  color: var(--potala-text-muted);
 }
 
 .marketplace-footer__social {
@@ -1409,7 +1434,7 @@ img {
   height: 2rem;
   border: 1px solid rgb(213 165 79 / 35%);
   border-radius: 999px;
-  color: rgb(245 241 232 / 88%);
+  color: var(--potala-text-muted);
   transition:
     color 0.2s ease,
     border-color 0.2s ease,
@@ -1441,7 +1466,7 @@ img {
   padding-block: 0.18rem;
   font-size: 0.78rem;
   line-height: 1.8;
-  color: rgb(245 241 232 / 68%);
+  color: var(--potala-text-muted);
   transition: color 0.2s ease;
 }
 
@@ -1462,7 +1487,7 @@ img {
   margin-bottom: 0.7rem;
   font-size: 0.78rem;
   line-height: 1.45;
-  color: rgb(245 241 232 / 72%);
+  color: var(--potala-text-muted);
 }
 
 .marketplace-footer__contact-icon {
@@ -1506,7 +1531,7 @@ img {
 .marketplace-footer__copyright {
   margin: 0;
   font-size: 0.75rem;
-  color: rgb(245 241 232 / 55%);
+  color: var(--potala-text-muted);
 }
 
 .marketplace-footer__payments {
@@ -1524,7 +1549,7 @@ img {
   align-items: center;
   justify-content: center;
   min-height: 1.35rem;
-  color: rgb(245 241 232 / 82%);
+  color: var(--potala-text-muted);
 }
 
 .payment-brand__mark {
@@ -1538,7 +1563,7 @@ img {
 }
 
 .payment-brand--visa .payment-brand__mark {
-  color: #8eb8ff;
+  color: #75634b;
   font-style: italic;
   letter-spacing: 0.08em;
 }
@@ -1582,7 +1607,7 @@ img {
 }
 
 .payment-brand--boleto .payment-brand__mark {
-  color: rgb(245 241 232 / 78%);
+  color: var(--potala-text-muted);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -1596,7 +1621,7 @@ img {
   }
 }
 
-/* .dark removido: o tema Potala já é navy/dourado em :root */
+/* A paleta Potala é definida em :root. */
 
 @layer base {
   * {
@@ -1611,3 +1636,33 @@ img {
     @apply font-sans;
   }
 }
+
+/* O banner conserva a fotografia e a atmosfera originais. */
+.potala-hero {
+  --potala-bg: #041126;
+  --potala-text: #f5efe2;
+  --potala-cream: #f5efe2;
+}
+
+.potala-btn-primary { color: #35332f; }
+
+.featured-category-cta { color: var(--potala-text-muted); }
+
+/* Compatibilidade dos componentes que usavam a antiga base azul como texto. */
+.text-potala-bg { color: var(--potala-text-primary); }
+.bg-potala-cream { background-color: #ecdbb9; }
+
+/* Marca com contraste sobre o fundo areia amarelo. */
+.brand-logo {
+  --potala-gold: #72501d;
+  --potala-gold-light: #72501d;
+}
+.brand-logo__mark { filter: brightness(0.5) saturate(1.35); }
+
+/* Topo amarelo mais intenso, com superfícies areia claras no conteúdo. */
+#topo {
+  --potala-bg: #e9b94e;
+  --potala-bg-secondary: #dbab43;
+  --potala-panel: #f1d188;
+}
+.potala-announcement { background-color: #d9a83c; }

@@ -3,7 +3,7 @@ import { TruckIcon } from "@/components/storefront/icons";
 
 export function AnnouncementBar() {
   return (
-    <div className="border-b border-potala-border bg-[#020b18] text-potala-gold">
+    <div className="potala-announcement border-b border-potala-border bg-potala-bg-secondary text-potala-text">
       <div className="potala-container relative flex h-10 items-center justify-center md:h-[2.55rem]">
         <span
           aria-hidden="true"

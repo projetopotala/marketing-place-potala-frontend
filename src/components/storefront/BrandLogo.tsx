@@ -45,13 +45,13 @@ export function BrandLogo({
   }
 
   return (
-    <span className={`inline-flex min-w-0 items-center gap-3 ${className}`}>
+    <span className={`brand-logo inline-flex min-w-0 items-center gap-3 ${className}`}>
       <Image
         src={BRAND.logoSrc}
         alt=""
         width={72}
         height={72}
-        className="h-14 w-14 shrink-0 md:h-16 md:w-16 lg:h-[4.25rem] lg:w-[4.25rem]"
+        className="brand-logo__mark h-14 w-14 shrink-0 md:h-16 md:w-16 lg:h-[4.25rem] lg:w-[4.25rem]"
         priority={priority}
       />
       <span className="min-w-0 text-potala-gold">
