@@ -15,6 +15,7 @@ import { listPublicProducts, toStorefrontProduct } from "@/lib/api/catalog-publi
  */
 export const metadata = {
   title: "Novidades | Instituto Potala Marketplace",
+  alternates: { canonical: "/novidades" },
   description: "Produtos publicados mais recentemente no Instituto Potala.",
 };
 

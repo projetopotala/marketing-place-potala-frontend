@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
 import { AppProviders } from "@/components/providers/AppProviders";
 import "./globals.css";
+import { SITE_URL } from "@/lib/site";
 
 const potalaSerif = Cormorant_Garamond({
   variable: "--font-potala-serif",
@@ -18,6 +19,7 @@ const potalaSans = Manrope({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Instituto Potala Marketplace",
   description:
     "Produtos, cursos e experiências para bem-estar, aprendizado, cura e expansão espiritual.",

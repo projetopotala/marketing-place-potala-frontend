@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { ProductImage } from "@/components/commerce/ProductImage";
 import Link from "next/link";
 import { useId, useState, type MouseEvent } from "react";
 import { Heart } from "lucide-react";
@@ -144,7 +144,7 @@ export function ProductCard({
           compact ? "aspect-square" : "aspect-[4/3]"
         }`}
       >
-        <Image
+        <ProductImage
           src={product.imageSrc}
           alt={product.name}
           fill

@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/catalog-public";
 import { getProductRatingSummary, listProductReviews } from "@/lib/api/reviews";
 import styles from "./page.module.css";
+import { SITE_URL } from "@/lib/site";
 
 /**
  * Rewritten this session (Fase 1 do plano até 05/10) — real produto via
@@ -36,6 +37,7 @@ export async function generateMetadata({
 
   return {
     title: `${product.title} | Instituto Potala Marketplace`,
+    alternates: { canonical: `/produto/${encodeURIComponent(product.id)}` },
     description: product.description || product.title,
   };
 }
@@ -77,6 +79,25 @@ export default async function ProductPage({
 
   return (
     <div className={styles.page}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: product.name,
+          description: apiProduct.description,
+          image: images.map((image) => new URL(image.src, SITE_URL).href),
+          offers: {
+            "@type": "Offer",
+            url: `${SITE_URL}/produto/${encodeURIComponent(apiProduct.id)}`,
+            priceCurrency: "BRL",
+            price: product.price,
+            availability: (product.stock ?? 0) > 0
+              ? "https://schema.org/InStock"
+              : "https://schema.org/OutOfStock",
+          },
+        }).replace(/</g, "\\u003c") }}
+      />
       <div className={styles.container}>
         <nav className={styles.breadcrumb} aria-label="Breadcrumb">
           <ol>

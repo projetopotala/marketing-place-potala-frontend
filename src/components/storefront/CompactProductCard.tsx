@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { ProductImage } from "@/components/commerce/ProductImage";
 import Link from "next/link";
 import type { CompactProduct } from "@/types/marketplace";
 import { formatPrice } from "@/data/marketplace";
@@ -17,7 +17,7 @@ export function CompactProductCard({ product }: CompactProductCardProps) {
       className="discovery-compact-card group block min-w-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-potala-gold"
     >
       <div className="relative aspect-[6/5] overflow-hidden rounded-[0.65rem]">
-        <Image
+        <ProductImage
           src={product.imageSrc}
           alt={product.name}
           fill

@@ -28,6 +28,7 @@ export async function generateMetadata({
   }
   return {
     title: `${category.name} | Instituto Potala Marketplace`,
+    alternates: { canonical: `/categoria/${encodeURIComponent(category.slug)}` },
     description: `Produtos da categoria ${category.name} no Instituto Potala.`,
   };
 }

@@ -12,6 +12,7 @@ import {
 
 export const metadata = {
   title: "Catálogo | Instituto Potala Marketplace",
+  alternates: { canonical: "/catalogo" },
   description: "Explore o catálogo do Instituto Potala Marketplace.",
 };
 

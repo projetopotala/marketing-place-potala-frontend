@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/site";
 import { DiscoverySections } from "@/components/storefront/DiscoverySections";
 import { FeaturedCategories } from "@/components/storefront/FeaturedCategories";
 import { FeaturedProducts } from "@/components/storefront/FeaturedProducts";
@@ -19,9 +21,20 @@ import { TestimonialsSection } from "@/components/storefront/TestimonialsSection
  */
 export const dynamic = "force-dynamic";
 
+export const metadata: Metadata = { alternates: { canonical: "/" } };
+
 export default function Home() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: "Instituto Potala Marketplace",
+          url: SITE_URL,
+        }).replace(/</g, "\\u003c") }}
+      />
       <HeroSection />
       <FeaturedCategories />
       <FeaturedProducts />

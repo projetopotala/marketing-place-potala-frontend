@@ -1,12 +1,12 @@
 "use client";
 
-import Image from "next/image";
+import { ProductImage } from "@/components/commerce/ProductImage";
 import { useState } from "react";
-import type { ProductImage } from "@/types/marketplace";
+import type { ProductImage as StorefrontProductImage } from "@/types/marketplace";
 import styles from "./ProductGallery.module.css";
 
 interface ProductGalleryProps {
-  images: ProductImage[];
+  images: StorefrontProductImage[];
   productName: string;
 }
 
@@ -21,7 +21,7 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
   return (
     <div className={styles.gallery}>
       <div className={styles.main}>
-        <Image
+        <ProductImage
           src={active.src}
           alt={active.alt || productName}
           fill
@@ -44,7 +44,7 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
                   aria-pressed={selected}
                   onClick={() => setActiveIndex(index)}
                 >
-                  <Image
+                  <ProductImage
                     src={image.src}
                     alt=""
                     fill

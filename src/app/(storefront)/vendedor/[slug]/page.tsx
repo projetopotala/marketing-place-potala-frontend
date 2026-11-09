@@ -42,6 +42,7 @@ export async function generateMetadata({
 
   return {
     title: `${seller.tradeName} | Instituto Potala Marketplace`,
+    alternates: { canonical: `/vendedor/${encodeURIComponent(slug)}` },
     description:
       seller.description ??
       `Conheça os produtos da loja ${seller.tradeName} no Instituto Potala.`,
