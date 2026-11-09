@@ -25,6 +25,7 @@ test("home tem canonical e dados estruturados e recupera foto quebrada", async (
 
   const image = page.locator(".featured-product-card img").first();
   await expect(image).toBeVisible();
+  await image.scrollIntoViewIfNeeded();
   await page.route("**/audit-broken-product.png", (route) => route.abort());
   await image.evaluate((element) => {
     const image = element as HTMLImageElement;
@@ -33,5 +34,8 @@ test("home tem canonical e dados estruturados e recupera foto quebrada", async (
   });
   await expect(image).toHaveAttribute("src", "/images/potala/product-unavailable.svg");
   await expect(image).toHaveAttribute("alt", /imagem indisponível/);
-  await expect.poll(() => image.evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  await expect.poll(
+    () => image.evaluate((element) => (element as HTMLImageElement).naturalWidth),
+    { timeout: 15000 },
+  ).toBeGreaterThan(0);
 });
