@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/sellers";
 import { ADMIN_SELLER_STATUS_LABEL } from "@/lib/api/admin";
 import styles from "@/components/seller/seller.module.css";
+import { SellerPaymentPreferences } from './SellerPaymentPreferences';
 
 /**
  * Real via GET/PATCH /seller/settings (sellers-service, novo nesta
@@ -173,10 +174,12 @@ export function SellerSettingsView() {
           </p>
         )}
 
-        <button type="submit" className={styles.primaryBtn} disabled={isSaving}>
+        {settings.membershipRole !== 'OWNER' && <p>Somente o proprietário pode alterar os cadastros desta loja.</p>}
+        <button type="submit" className={styles.primaryBtn} disabled={isSaving || settings.membershipRole !== 'OWNER'}>
           {isSaving ? "Salvando…" : "Salvar"}
         </button>
       </form>
+      {settings.membershipRole === 'OWNER' && <SellerPaymentPreferences />}
     </>
   );
 }

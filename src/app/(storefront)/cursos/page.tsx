@@ -1,0 +1,1 @@
+import { ActivityList } from "@/features/activities/PublicActivities"; export default function Page(){return <ActivityList kind="COURSE"/>;}

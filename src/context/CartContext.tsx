@@ -1,4 +1,6 @@
 "use client";
+import { trackAnalyticsEvent } from "@/lib/analytics";
+
 
 import {
   createContext,
@@ -6,6 +8,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -73,6 +76,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+  }, [items, isReady]);
+
+  const previousItems = useRef<CartItem[] | null>(null);
+  useEffect(() => {
+    if (!isReady) return;
+    const previous = previousItems.current;
+    previousItems.current = items;
+    if (!previous) return;
+    for (const item of items) {
+      const before = previous.find((entry) => entry.productId === item.productId)?.quantity ?? 0;
+      const quantity = item.quantity - before;
+      if (quantity > 0 && /^[0-9a-f-]{36}$/i.test(item.productId)) {
+        trackAnalyticsEvent("add_to_cart", { productId: item.productId, quantity: Math.min(quantity, 10000) });
+      }
+    }
   }, [items, isReady]);
 
   const addItem = useCallback((input: AddCartItemInput) => {

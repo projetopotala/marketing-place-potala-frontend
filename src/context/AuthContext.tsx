@@ -1,4 +1,6 @@
 "use client";
+import { trackAnalyticsEvent } from "@/lib/analytics";
+
 
 import {
   createContext,
@@ -115,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }) => {
       try {
         await authApi.registerCustomer(input);
+        trackAnalyticsEvent("sign_up");
         return { ok: true as const };
       } catch (error) {
         return { ok: false as const, error: registerErrorMessage(error) };

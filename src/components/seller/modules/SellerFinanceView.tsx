@@ -179,7 +179,7 @@ export function SellerFinanceView() {
       <header>
         <h1 className={styles.pageTitle}>Financeiro</h1>
         <p className={styles.pageLead}>
-          Faturamento por status de pagamento, calculado a partir dos seus
+          Valores brutos das linhas, antes dos descontos, por status de pagamento, calculados a partir dos seus
           pedidos reais (até os {SUMMARY_LIMIT} mais recentes).
         </p>
       </header>
@@ -195,7 +195,7 @@ export function SellerFinanceView() {
       ) : (
         <section className={styles.metrics} aria-label="Totais por status de pagamento">
           <article className={styles.metricCard}>
-            <p className={styles.metricLabel}>Pago</p>
+            <p className={styles.metricLabel}>Bruto pago</p>
             <p className={styles.metricValue}>{formatMoney(summary.paidCents)}</p>
             <p className={styles.metricLabel}>{summary.paidCount} pedido(s)</p>
           </article>
@@ -213,6 +213,7 @@ export function SellerFinanceView() {
       )}
 
       <section className={styles.panel}>
+        <p>Comissões, taxas e líquido são cotações registradas no pedido. Não representam repasses executados. Gateway indisponível até a integração do provedor. Pedidos anteriores sem snapshot aparecem com “—”.</p>
         <h2 className={styles.panelTitle}>Transações</h2>
         {isTableLoading ? (
           <p role="status">Carregando transações…</p>
@@ -231,6 +232,7 @@ export function SellerFinanceView() {
                   <th>Data</th>
                   <th>Status do pagamento</th>
                   <th>Valor</th>
+                  <th>Desconto</th><th>Comissão</th><th>Taxas</th><th>Líquido previsto</th>
                 </tr>
               </thead>
               <tbody>
@@ -248,6 +250,10 @@ export function SellerFinanceView() {
                       </span>
                     </td>
                     <td>{formatMoney(sellerOrder.subtotalCents)}</td>
+                    <td>{sellerOrder.financialSnapshot ? formatMoney(sellerOrder.discountCents ?? 0) : '—'}</td>
+                    <td>{sellerOrder.financialSnapshot ? formatMoney(sellerOrder.commissionCents) : '—'}</td>
+                    <td>{sellerOrder.financialSnapshot ? formatMoney(sellerOrder.gatewayFeeCents ?? 0) : '—'}</td>
+                    <td>{sellerOrder.financialSnapshot ? formatMoney(sellerOrder.sellerNetCents) : '—'}</td>
                   </tr>
                 ))}
               </tbody>

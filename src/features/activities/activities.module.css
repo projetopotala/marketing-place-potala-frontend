@@ -1,0 +1,85 @@
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 36px 24px;
+  color: #302e28;
+}
+.page h1 {
+  font-size: 2rem;
+  margin-bottom: 16px;
+}
+.page nav {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 20px;
+}
+.card {
+  border: 1px solid #dedbd0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 24px;
+  margin-bottom: 18px;
+}
+.card h2 {
+  font-size: 1.3rem;
+  margin-bottom: 12px;
+}
+.card p {
+  margin: 12px 0;
+  white-space: pre-wrap;
+}
+.page button,
+.action {
+  display: inline-block;
+  background: var(--potala-gold-500, #d5a64f);
+  color: var(--potala-text-primary, #35332f);
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 16px;
+  margin: 8px 8px 8px 0;
+  cursor: pointer;
+}
+.page button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.page input,
+.page select,
+.page textarea {
+  display: block;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+  width: 100%;
+  margin: 6px 0 14px;
+  background: white;
+  color: #222;
+}
+.error {
+  padding: 12px;
+  background: #fff0e8;
+  color: #8c3025;
+  border-radius: 6px;
+}
+.notice {
+  padding: 12px;
+  background: #f3e5c9;
+  border-radius: 6px;
+}
+.page small {
+  display: block;
+  color: #666;
+  margin: 8px 0;
+}
+.page label {
+  display: block;
+}
+.page a {
+  text-decoration: underline;
+}

@@ -1,0 +1,1 @@
+import { MyActivities } from "@/features/activities/MyActivities"; import {AccountChrome} from "@/components/account/AccountChrome"; export default function Page(){return <AccountChrome title="Meus materiais" breadcrumbCurrent="Meus materiais"><MyActivities view="downloads"/></AccountChrome>;}

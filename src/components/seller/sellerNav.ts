@@ -32,6 +32,7 @@ function matchPath(href: string) {
 }
 
 export const SELLER_NAVIGATION: SellerNavItem[] = [
+ {id:"atividades",label:"Cursos e eventos",href:"/loja/atividades",icon:LayoutDashboard,match:matchPath("/loja/atividades")},
   {
     id: "dashboard",
     label: "Painel",

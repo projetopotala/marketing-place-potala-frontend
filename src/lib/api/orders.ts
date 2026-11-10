@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import { getAnalyticsContext } from '@/lib/analytics';
 import type { ReviewResponse } from "./reviews";
 import type { ReturnResponse } from "./returns";
 
@@ -84,6 +85,9 @@ export interface CheckoutShippingAddressInput {
 }
 
 export interface CheckoutInput {
+  paymentMethod?: 'PIX' | 'CARD';
+  analyticsConsent?: boolean;
+  analyticsSessionId?: string;
   items: CheckoutItemInput[];
   shippingAddress: CheckoutShippingAddressInput;
   /** Optional -- validated server-side (CouponsService.resolveForCheckout, orders-service). An invalid/expired/disabled code rejects the whole checkout with a clear message, never silently ignored. */
@@ -118,6 +122,9 @@ export interface OrderItemResponse {
 }
 
 export interface SellerOrderResponse {
+  discountCents?: number;
+  gatewayFeeCents?: number;
+  financialSnapshot?: {version: number; lines: {policyId: string; commissionBps: number; gatewayFeeBps: number; fixedFeeCents: number}[]} | null;
   id: string;
   orderId: string;
   sellerId: string;
@@ -186,15 +193,28 @@ export interface OrderResponse {
  * pedido novo, distinto. O chamador deve evitar disparar duas vezes
  * enquanto uma chamada está em voo (ver `submitting` em checkout/page.tsx).
  */
-export async function checkout(input: CheckoutInput): Promise<OrderResponse> {
+export async function checkout(input: CheckoutInput, idempotencyKey: string = crypto.randomUUID()): Promise<OrderResponse> {
   const result = await apiFetch<OrderResponse>("/orders/checkout", {
     method: "POST",
-    body: JSON.stringify(input),
+    headers: {'Idempotency-Key': idempotencyKey},
+    body: JSON.stringify({...input, ...getAnalyticsContext()}),
   });
   if (!result) {
     throw new Error("Resposta vazia do servidor.");
   }
   return result;
+}
+
+export async function payActivityEnrollment(enrollmentId: string): Promise<OrderResponse> {
+  const result = await apiFetch<OrderResponse>('/me/activity-payments', {method: 'POST', body: JSON.stringify({enrollmentId, ...getAnalyticsContext()})});
+  if (!result) throw new Error('Não foi possível preparar o pagamento.');
+  return result;
+}
+
+export interface FinancialPolicy {id: string; scope: 'PLATFORM' | 'SELLER' | 'CATEGORY' | 'PRODUCT'; scopeId: string | null; version: number; commissionBps: number; gatewayFeeBps: number; fixedFeeCents: number; createdAt: string}
+export async function listFinancialPolicies() { return await apiFetch<FinancialPolicy[]>('/admin/finance/policies') ?? []; }
+export async function createFinancialPolicy(input: Omit<FinancialPolicy, 'id' | 'version' | 'createdAt' | 'scopeId'> & {scopeId?: string}) {
+  return apiFetch<FinancialPolicy>('/admin/finance/policies', {method: 'POST', body: JSON.stringify(input)});
 }
 
 export interface PageInfo {

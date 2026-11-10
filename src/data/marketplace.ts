@@ -34,6 +34,8 @@ export const BRAND = {
 
 /** Links da barra superior (desktop). Categorias do disclosure vêm de HEADER_CATEGORIES. */
 export const NAV_CATEGORIES: NavCategory[] = [
+  {id:"cursos",label:"Cursos",href:"/cursos"},
+  {id:"eventos",label:"Eventos",href:"/eventos"},
   { id: "categorias", label: "Categorias", href: "/catalogo", hasMenu: true },
   ...HEADER_CATEGORIES.map((category) => ({
     id: category.id,

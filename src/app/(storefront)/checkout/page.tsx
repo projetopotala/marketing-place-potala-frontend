@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import type { CheckoutPaymentMethod, CurrentOrderSummary, ShippingOptionId } from "@/types/cart";
 import { calcLineTotal, ORDER_STORAGE_KEY, PAYMENT_LABELS, SHIPPING_OPTIONS } from "@/data/cart";
 import { formatPrice } from "@/data/marketplace";
@@ -106,6 +106,7 @@ function CheckoutForm() {
   } = useAccountData();
   const formId = useId();
   const [submitting, setSubmitting] = useState(false);
+  const checkoutAttempt = useRef<{payload: string; key: string} | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -209,7 +210,8 @@ function CheckoutForm() {
       // rede cria um pedido novo — o guard `submitting` acima evita o caso
       // mais comum (duplo clique), mas não uma falha de rede a meio do
       // caminho (gap conhecido, ver status do projeto).
-      const response = await checkoutApi({
+      const checkoutInput = {
+        paymentMethod: payment === 'pix' ? 'PIX' as const : 'CARD' as const,
         items: items.map((item) => ({
           productId: item.productId,
           variantId: item.variantId,
@@ -231,7 +233,10 @@ function CheckoutForm() {
         // status-migracao-microservicos.md. Omitido quando vazio: o campo
         // é opcional, sem cupom nenhum aplicado.
         ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
-      });
+      };
+      const payload = JSON.stringify(checkoutInput);
+      if (checkoutAttempt.current?.payload !== payload) checkoutAttempt.current = {payload, key: crypto.randomUUID()};
+      const response = await checkoutApi(checkoutInput, checkoutAttempt.current.key);
 
       const canonicalOrder = buildOrderSummaryFromResponse(response, {
         cartItemsByProductId,
@@ -533,7 +538,6 @@ function CheckoutForm() {
                   [
                     ["pix", "Pix"],
                     ["card", "Cartão de crédito"],
-                    ["boleto", "Boleto"],
                   ] as const
                 ).map(([value, label]) => (
                   <label key={value} className={styles.option}>
@@ -547,28 +551,14 @@ function CheckoutForm() {
                     <span>
                       <strong>{label}</strong>
                       <small>
-                        {value === "pix"
-                          ? "Confirmação imediata"
-                          : value === "card"
-                            ? "Campos ilustrativos — sem captura real"
-                            : "Compensação em até 1 dia útil"}
+                        Gateway indisponível; sujeito à aceitação de cada loja.
                       </small>
                     </span>
                   </label>
                 ))}
               </div>
 
-              {payment === "card" ? (
-                <div className={styles.cardDemo} aria-hidden="true">
-                  <p>Demonstração visual — não informe dados reais de cartão.</p>
-                  <div className={styles.grid2}>
-                    <input disabled placeholder="Número do cartão (demonstração)" />
-                    <input disabled placeholder="Nome impresso (demonstração)" />
-                    <input disabled placeholder="Validade MM/AA" />
-                    <input disabled placeholder="CVV" />
-                  </div>
-                </div>
-              ) : null}
+              <p>O provedor de pagamento ainda não foi integrado. Não informe dados de cartão ou chave Pix. Nenhuma cobrança ou repasse será aprovado artificialmente.</p>
             </fieldset>
           </div>
 

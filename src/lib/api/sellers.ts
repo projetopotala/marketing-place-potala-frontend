@@ -13,6 +13,7 @@ import type { AdminSellerDocumentType, AdminSellerStatus } from "./admin";
  */
 
 export interface MySellerSettings {
+  membershipRole?: 'OWNER' | 'MANAGER' | 'STAFF';
   id: string;
   legalName: string;
   tradeName: string;
@@ -26,6 +27,27 @@ export interface MySellerSettings {
   commissionBps: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SellerPaymentPreferences {
+  acceptPix: boolean;
+  acceptCard: boolean;
+  payoutSchedule: 'MANUAL' | 'WEEKLY' | 'MONTHLY';
+  revision: number;
+  recipientConfigured: boolean;
+  bankLabel: string | null;
+  accountLast4: string | null;
+  gatewayStatus: 'UNAVAILABLE';
+}
+export async function getSellerPaymentPreferences() {
+  const result = await apiFetch<SellerPaymentPreferences>('/seller/settings/payments');
+  if (!result) throw new Error('Não foi possível carregar as preferências.');
+  return result;
+}
+export async function updateSellerPaymentPreferences(input: Pick<SellerPaymentPreferences, 'acceptPix' | 'acceptCard' | 'payoutSchedule'>) {
+  const result = await apiFetch<SellerPaymentPreferences>('/seller/settings/payments', {method: 'PATCH', body: JSON.stringify(input)});
+  if (!result) throw new Error('Não foi possível salvar as preferências.');
+  return result;
 }
 
 export async function getMySellerSettings(): Promise<MySellerSettings> {

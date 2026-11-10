@@ -1,0 +1,1 @@
+import { ActivityManager } from "@/features/activities/ActivityManager"; export default function Page(){return <ActivityManager/>;}

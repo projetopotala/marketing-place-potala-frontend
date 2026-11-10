@@ -1,4 +1,6 @@
 "use client";
+import { trackAnalyticsEvent } from "@/lib/analytics";
+
 
 import { useId, useState, type FormEvent } from "react";
 import { PasswordField } from "@/components/auth/PasswordField";
@@ -99,6 +101,7 @@ export function SellerRegisterForm({ onBackToLogin }: SellerRegisterFormProps) {
         phone: phone.trim(),
         description: description.trim() || undefined,
       });
+      trackAnalyticsEvent("seller_application");
       onBackToLogin(
         email.trim().toLowerCase(),
         "Cadastro enviado! Sua loja está em análise — entre para acompanhar o status.",

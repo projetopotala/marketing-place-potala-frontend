@@ -1,4 +1,6 @@
 "use client";
+import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
+
 
 import type { ReactNode } from "react";
 import { AuthProvider } from "@/context/AuthContext";
@@ -9,7 +11,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
       <CartProvider>
-        <AccountDataProvider>{children}</AccountDataProvider>
+        <AccountDataProvider>{children}<AnalyticsProvider /></AccountDataProvider>
       </CartProvider>
     </AuthProvider>
   );

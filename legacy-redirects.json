@@ -1,0 +1,3 @@
+[
+  { "source": "/loja/dashboard", "destination": "/loja", "statusCode": 301 }
+]

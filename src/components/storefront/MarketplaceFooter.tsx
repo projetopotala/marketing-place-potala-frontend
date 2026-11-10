@@ -1,3 +1,4 @@
+import { PrivacyPreferencesButton } from "@/components/analytics/AnalyticsProvider";
 import {
   BRAND,
   CONTACT_INFO,
@@ -109,6 +110,7 @@ export function MarketplaceFooter() {
 
       <div className="marketplace-footer__bottom">
         <div className="marketplace-footer__bottom-inner">
+          <div><PrivacyPreferencesButton /></div>
           <p className="marketplace-footer__copyright">
             © {new Date().getFullYear()} Instituto Potala Marketplace. Todos os
             direitos reservados.
