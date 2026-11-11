@@ -2,6 +2,27 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api/client";
 import { API_BASE_URL } from "@/lib/api/config";
+const REPORT_GROUPS = [
+  { label: "Produtos e estoque", keys: ["products", "stock"] },
+  { label: "Vendedores", keys: ["vendors"] },
+  { label: "Clientes", keys: ["customers"] },
+  {
+    label: "Cursos e eventos",
+    keys: ["activities", "sessions", "enrollments"],
+  },
+  { label: "Faturamento e comissões", keys: ["sales", "items"] },
+  { label: "Pedidos", keys: ["orders"] },
+  {
+    label: "Pagamentos, taxas e repasses",
+    keys: ["payments", "refunds", "payouts"],
+  },
+  { label: "Avaliações e favoritos", keys: ["reviews", "favorites"] },
+  { label: "Cupons", keys: ["coupons"] },
+  {
+    label: "Atendimentos",
+    keys: ["contacts", "returns", "claims", "disputes"],
+  },
+];
 export function ServerReportsView() {
   const [views, setViews] = useState<
     { key: string; label: string; scoped: boolean }[]
@@ -26,7 +47,9 @@ export function ServerReportsView() {
         format,
         ...(from ? { from: new Date(from).toISOString() } : {}),
         ...(to ? { to: new Date(to).toISOString() } : {}),
-        ...(sellerId ? { sellerId } : {}),
+        ...(sellerId && views.find((v) => v.key === view)?.scoped
+          ? { sellerId }
+          : {}),
         ...(status ? { status } : {}),
       });
       const response = await fetch(
@@ -57,19 +80,34 @@ export function ServerReportsView() {
     <section style={{ padding: 24, display: "grid", gap: 16, maxWidth: 850 }}>
       <h1>Relatórios</h1>
       <p>
-        Exportação dos registros reais, filtrados no servidor. Até 10.000 linhas
-        por arquivo; refine o período para volumes maiores. Valores financeiros
-        em centavos.
+        Exportação dos registros reais, filtrados no servidor. Até 10.000
+        linhas por arquivo; refine o período para volumes maiores. Valores
+        financeiros em centavos. Vendas incluem comissão e taxa do gateway.
+        Repasses exibem a previsão líquida; NOT_INTEGRATED e valor pago vazio
+        indicam ausência de integração, sem comprovação de transferência.
+        Clientes usam apenas identificador e dados de situação cadastral.
       </p>
       {error && <p role="alert">{error}</p>}
       <label>
         Visão{" "}
-        <select value={view} onChange={(e) => setView(e.target.value)}>
-          {views.map((v) => (
-            <option key={v.key} value={v.key}>
-              {v.label}
-              {v.scoped ? " · aceita escopo por loja" : " · escopo global"}
-            </option>
+        <select
+          value={view}
+          onChange={(e) => {
+            setView(e.target.value);
+            setStatus("");
+          }}
+        >
+          {REPORT_GROUPS.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {views
+                .filter((v) => group.keys.includes(v.key))
+                .map((v) => (
+                  <option key={v.key} value={v.key}>
+                    {v.label}
+                    {v.scoped ? " · por loja" : " · global"}
+                  </option>
+                ))}
+            </optgroup>
           ))}
         </select>
       </label>
@@ -91,7 +129,11 @@ export function ServerReportsView() {
       </label>
       <label>
         ID da loja (opcional){" "}
-        <input value={sellerId} onChange={(e) => setSellerId(e.target.value)} />
+        <input
+          disabled={!views.find((v) => v.key === view)?.scoped}
+          value={sellerId}
+          onChange={(e) => setSellerId(e.target.value)}
+        />
       </label>
       <label>
         Status técnico (opcional){" "}

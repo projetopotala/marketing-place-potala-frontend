@@ -11,6 +11,7 @@ import {
 import s from "./activities.module.css";
 import { MaterialUpload } from "./MaterialUpload";
 import { ActivityParticipants } from "./ActivityParticipants";
+import { ActivityDetailsEditor } from "./ActivityDetailsEditor";
 export function ActivityManager({ admin = false }: { admin?: boolean }) {
   const base = admin ? "/admin/activities" : "/seller/activities";
   const [editing, setEditing] = useState<Activity | null>(null);
@@ -26,6 +27,7 @@ export function ActivityManager({ admin = false }: { admin?: boolean }) {
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false),
     [count, setCount] = useState(1);
+  const [instructorCount, setInstructorCount] = useState(1);
   const [nextCursor, setNextCursor] = useState<string | null>(null),
     [moreLoading, setMoreLoading] = useState(false);
   async function load(cursor?: string) {
@@ -42,7 +44,12 @@ export function ActivityManager({ admin = false }: { admin?: boolean }) {
     }
   }
   useEffect(() => {
-    void load();
+    apiFetch<ActivityPage<Activity>>(`${base}?limit=20`)
+      .then((page) => {
+        setRows(page?.items ?? []);
+        setNextCursor(page?.pageInfo.nextCursor ?? null);
+      })
+      .catch((err: Error) => setError(err.message));
   }, [base]);
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,6 +64,13 @@ export function ActivityManager({ admin = false }: { admin?: boolean }) {
           title: f.get("title"),
           description: f.get("description"),
           kind: f.get("kind"),
+          modality: f.get("modality") || undefined,
+          venue: f.get("venue"),
+          meetingUrl: f.get("meetingUrl"),
+          instructors: Array.from({ length: instructorCount }, (_, i) => ({
+            name: String(f.get(`instructorName${i}`) ?? "").trim(),
+            bio: String(f.get(`instructorBio${i}`) ?? "").trim(),
+          })).filter((i) => i.name || i.bio),
           priceCents: Number(f.get("priceCents")),
           capacity: Number(f.get("capacity")),
           timezone: f.get("timezone"),
@@ -71,6 +85,7 @@ export function ActivityManager({ admin = false }: { admin?: boolean }) {
       form.reset();
       setEditing(null);
       setCount(1);
+      setInstructorCount(1);
       setMessage(
         "Atividade criada como rascunho. Adicione os materiais e publique quando estiver pronta.",
       );
@@ -158,6 +173,65 @@ export function ActivityManager({ admin = false }: { admin?: boolean }) {
           </select>
         </label>
         <label>
+          Modalidade
+          <select name="modality" defaultValue={editing?.modality ?? ""}>
+            <option value="">Definir antes de publicar</option>
+            <option value="IN_PERSON">Presencial</option>
+            <option value="ONLINE">On-line</option>
+            <option value="HYBRID">Híbrido</option>
+          </select>
+        </label>
+        <label>
+          Local e endereço (presencial ou híbrido)
+          <textarea
+            name="venue"
+            maxLength={1000}
+            defaultValue={editing?.venue ?? ""}
+          />
+        </label>
+        <label>
+          Link privado do encontro (on-line ou híbrido)
+          <input
+            name="meetingUrl"
+            type="url"
+            maxLength={2048}
+            defaultValue={editing?.meetingUrl ?? ""}
+          />
+        </label>
+        <p>
+          O link deve usar HTTPS e fica disponível somente para inscrições
+          confirmadas. Complete modalidade, instrutores e local ou link antes de
+          publicar.
+        </p>
+        {Array.from({ length: instructorCount }, (_, i) => (
+          <fieldset key={`instructor${i}`}>
+            <legend>Instrutor {i + 1}</legend>
+            <label>
+              Nome
+              <input
+                name={`instructorName${i}`}
+                maxLength={160}
+                defaultValue={editing?.instructors?.[i]?.name}
+              />
+            </label>
+            <label>
+              Biografia
+              <textarea
+                name={`instructorBio${i}`}
+                maxLength={2000}
+                defaultValue={editing?.instructors?.[i]?.bio}
+              />
+            </label>
+          </fieldset>
+        ))}
+        <button
+          type="button"
+          disabled={instructorCount >= 20}
+          onClick={() => setInstructorCount(instructorCount + 1)}
+        >
+          Adicionar instrutor
+        </button>
+        <label>
           Preço em centavos (0 para gratuito)
           <input
             name="priceCents"
@@ -242,6 +316,7 @@ export function ActivityManager({ admin = false }: { admin?: boolean }) {
             onClick={() => {
               setEditing(null);
               setCount(1);
+              setInstructorCount(1);
             }}
           >
             Cancelar edição
@@ -273,6 +348,7 @@ export function ActivityManager({ admin = false }: { admin?: boolean }) {
               onClick={() => {
                 setEditing(a);
                 setCount(a.sessions.length);
+                setInstructorCount(Math.max(1, a.instructors?.length ?? 0));
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
             >
@@ -280,6 +356,9 @@ export function ActivityManager({ admin = false }: { admin?: boolean }) {
             </button>
           )}
           <ActivityParticipants base={base} id={a.id} />
+          {a.status !== "CANCELLED" && (
+            <ActivityDetailsEditor key={JSON.stringify([a.modality,a.venue,a.meetingUrl,a.instructors])} activity={a} base={base} onSaved={load} />
+          )}
           {a.status !== "CANCELLED" && (
             <>
               <button

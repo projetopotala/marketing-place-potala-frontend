@@ -6,6 +6,7 @@ import {
   Enrollment,
   Material,
   activityDate,
+  activityModalityLabel,
 } from "@/lib/api/activities";
 import { API_BASE_URL } from "@/lib/api/config";
 import s from "./activities.module.css";
@@ -42,7 +43,14 @@ export function MyActivities({
     }
   }
   useEffect(() => {
-    void load();
+    activityApi
+      .mine()
+      .then((page) => {
+        setRows(page?.items ?? []);
+        setNextCursor(page?.pageInfo.nextCursor ?? null);
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
   async function action(e: Enrollment, type: "cancel" | "pay" | "materials") {
     setBusy(e.id);
@@ -106,6 +114,25 @@ export function MyActivities({
           <article key={e.id} className={s.card}>
             <h2>{e.activity.title}</h2>
             <strong>{labels[e.status]}</strong>
+            {e.activity.modality && (
+              <p>{activityModalityLabel[e.activity.modality]}</p>
+            )}
+            {e.activity.venue && e.activity.modality !== "ONLINE" && (
+              <p>Local: {e.activity.venue}</p>
+            )}
+            {e.status === "CONFIRMED" &&
+              e.activity.status === "PUBLISHED" &&
+              e.activity.meetingUrl && (
+                <p>
+                  <a
+                    href={e.activity.meetingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Acessar encontro on-line
+                  </a>
+                </p>
+              )}
             {e.expiresAt && e.status === "PENDING_PAYMENT" && (
               <p>
                 Reserva até {activityDate(e.expiresAt, e.activity.timezone)}. A

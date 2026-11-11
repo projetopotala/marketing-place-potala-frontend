@@ -79,6 +79,7 @@ export function MarketplaceFooter() {
 
         <div className="marketplace-footer__column marketplace-footer__contact">
           <h2 className="marketplace-footer__heading">Fale Conosco</h2>
+          <Link href="/contato" className="underline">Enviar mensagem de atendimento</Link>
           <ul className="marketplace-footer__contact-list">
             <li>
               <span className="marketplace-footer__contact-icon" aria-hidden="true">

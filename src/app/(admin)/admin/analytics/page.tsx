@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
+import { ANALYTICS_CONFIGURATION } from '@/lib/analytics-config';
 
 interface AnalyticsSummary {
   sessions: number;
@@ -14,6 +15,7 @@ const LABELS: Record<string, string> = {
   page_view: "Visitas a páginas", view_item: "Visualizações de produto", add_to_cart: "Adições ao carrinho",
   begin_checkout: "Inícios de checkout", purchase: "Compras confirmadas", sign_up: "Cadastros de clientes",
   seller_application: "Candidaturas de vendedores", contact_click: "Cliques nos canais de contato",
+  contact_submit: "Mensagens recebidas e confirmadas",
   view_activity: "Visualizações de atividades", enroll: "Inscrições solicitadas", download: "Downloads solicitados",
 };
 
@@ -43,6 +45,7 @@ export default function AnalyticsPage() {
   return (
     <div>
       <AdminPageHeader title="Medição do funil" description="Eventos dos visitantes que permitiram a medição. Compras são confirmadas pelo servidor." />
+      <p>Medição própria ({ANALYTICS_CONFIGURATION.provider}). Tags externas desativadas conforme definição de {ANALYTICS_CONFIGURATION.approvalDate}.</p>
       <form onSubmit={load} className="flex flex-wrap items-end gap-4 rounded-lg border border-potala-border bg-potala-panel p-4">
         <label>De<input className="potala-input" name="from" type="date" /></label>
         <label>Até<input className="potala-input" name="to" type="date" /></label>

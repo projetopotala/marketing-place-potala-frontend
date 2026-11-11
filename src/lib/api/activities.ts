@@ -15,6 +15,10 @@ export interface Activity {
   id: string;
   title: string;
   description: string;
+  instructors: { name: string; bio: string }[];
+  modality: "IN_PERSON" | "ONLINE" | "HYBRID" | null;
+  venue: string | null;
+  meetingUrl?: string | null;
   kind: ActivityKind;
   status: "DRAFT" | "PUBLISHED" | "CANCELLED";
   priceCents: number;
@@ -79,4 +83,9 @@ export const activityKindLabel = {
   COURSE: "Curso",
   EVENT: "Evento",
   RECURRING: "Atividade recorrente",
+};
+export const activityModalityLabel = {
+  IN_PERSON: "Presencial",
+  ONLINE: "On-line",
+  HYBRID: "Híbrido",
 };

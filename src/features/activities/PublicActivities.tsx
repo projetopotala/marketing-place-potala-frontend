@@ -8,6 +8,7 @@ import {
   activityDate,
   activityPrice,
   activityKindLabel,
+  activityModalityLabel,
 } from "@/lib/api/activities";
 import s from "./activities.module.css";
 import { trackAnalyticsEvent } from "@/lib/analytics";
@@ -138,6 +139,19 @@ export function ActivityDetail({ id }: { id: string }) {
             {activityKindLabel[a.kind]} · {a.timezone}
           </small>
           <p>{a.description}</p>
+          {a.modality && <p>Modalidade: {activityModalityLabel[a.modality]}</p>}
+          {a.venue && a.modality !== "ONLINE" && <p>Local: {a.venue}</p>}
+          {!!a.instructors?.length && (
+            <section>
+              <h2>Instrutores</h2>
+              {a.instructors.map((instructor, i) => (
+                <div key={i}>
+                  <h3>{instructor.name}</h3>
+                  <p>{instructor.bio}</p>
+                </div>
+              ))}
+            </section>
+          )}
           <p>
             <strong>{activityPrice(a.priceCents)}</strong> · Capacidade:{" "}
             {a.capacity} participantes
