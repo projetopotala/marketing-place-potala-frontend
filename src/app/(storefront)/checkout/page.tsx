@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type FormEvent } from "react";
 import type { CheckoutPaymentMethod, CurrentOrderSummary, ShippingOptionId } from "@/types/cart";
-import { calcLineTotal, ORDER_STORAGE_KEY, PAYMENT_LABELS, SHIPPING_OPTIONS } from "@/data/cart";
+import { calcLineTotal, ORDER_STORAGE_KEY, PAYMENT_LABELS } from "@/data/cart";
 import { formatPrice } from "@/data/marketplace";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useAccountData } from "@/features/account/AccountDataContext";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { checkout as checkoutApi, type OrderResponse } from "@/lib/api/orders";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, apiFetch } from "@/lib/api/client";
 import styles from "./page.module.css";
 
 interface FormErrors {
@@ -26,6 +26,8 @@ interface FormErrors {
   city?: string;
   state?: string;
 }
+type FreightQuote = {sellerId: string; method: 'PICKUP' | 'DELIVERY' | 'NONE'; priceCents: number; estimatedDays: number; pickupAddress?: string};
+type FreightResult = {stores: Array<{sellerId: string; options: FreightQuote[]; selected: FreightQuote | null}>; shippingCents: number; discountCents: number; totalCents: number; available: boolean};
 
 /**
  * Mapeia a resposta real de POST /orders/checkout (potala-orders-service)
@@ -118,19 +120,30 @@ function CheckoutForm() {
   const [neighborhood, setNeighborhood] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
-  const [shipping, setShipping] = useState<ShippingOptionId>("economic");
+  const shipping: ShippingOptionId = "economic";
   const [couponCode, setCouponCode] = useState("");
   const [payment, setPayment] = useState<CheckoutPaymentMethod>("pix");
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<string | null>(null);
+  const [deliveryChoices, setDeliveryChoices] = useState<Array<{sellerId: string; method: 'PICKUP' | 'DELIVERY' | 'CARRIER'}>>([]);
+  const [freight, setFreight] = useState<{key: string; result: FreightResult} | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const freightKey = JSON.stringify([items.map(i => [i.productId, i.variantId, i.quantity]), fullName, street, number, complement, neighborhood, city, state, cep, couponCode, deliveryChoices]);
+  const freightCurrent = freight?.key === freightKey;
+  async function calculateFreight() {
+    setQuoting(true); setStatus(null);
+    try {
+      const result = await apiFetch<FreightResult>('/orders/shipping-quote', {method: 'POST', body: JSON.stringify({items: items.map(i => ({productId: i.productId, variantId: i.variantId, quantity: i.quantity})), shippingAddress: {recipient: fullName.trim(), street: street.trim(), number: number.trim(), complement: complement.trim() || undefined, neighborhood: neighborhood.trim(), city: city.trim(), state: state.trim().toUpperCase(), postalCode: cep.trim()}, deliveryChoices, ...(couponCode.trim() ? {couponCode: couponCode.trim()} : {})})});
+      if (result) setFreight({key: freightKey, result});
+    } catch(e) {setStatus(e instanceof Error ? e.message : 'Falha ao calcular entrega');} finally {setQuoting(false);}
+  }
 
-  const shippingOption = SHIPPING_OPTIONS[shipping];
   // orders-service ainda não calcula frete real nesta v1 (Order.shippingCents
   // sempre 0, ver README do serviço) — a escolha de prazo continua na UI
   // (informativa), mas o total exibido aqui (e o total real devolvido pelo
   // pedido confirmado) não soma o custo fixo de SHIPPING_OPTIONS, pra não
   // divergir do valor que o backend efetivamente cobra.
-  const total = subtotal;
+  const total = freightCurrent ? freight.result.totalCents / 100 : subtotal;
 
   const isCustomer = user?.role === "customer";
 
@@ -178,6 +191,7 @@ function CheckoutForm() {
     if (submitting) {
       return;
     }
+    if (!freightCurrent || !freight.result.available) {setStatus('Calcule e confirme uma opção disponível de entrega ou retirada para cada loja.'); return;}
 
     const missingVariant = items.find((item) => !item.variantId);
     if (missingVariant) {
@@ -227,6 +241,7 @@ function CheckoutForm() {
           state: state.trim().toUpperCase(),
           postalCode: cep.trim(),
         },
+        deliveryChoices: freight.result.stores.flatMap(s => s.selected && s.selected.method !== 'NONE' ? [{sellerId: s.sellerId, method: s.selected.method}] : []),
         // Backend valida (código, janela de vigência, habilitado) e
         // rejeita o checkout inteiro com uma mensagem clara se inválido
         // (CouponsService.resolveForCheckout, orders-service) -- ver
@@ -241,7 +256,7 @@ function CheckoutForm() {
       const canonicalOrder = buildOrderSummaryFromResponse(response, {
         cartItemsByProductId,
         shipping,
-        shippingLabel: shippingOption.label,
+        shippingLabel: 'Entrega/retirada conforme opções confirmadas por loja',
         payment,
         paymentLabel: PAYMENT_LABELS[payment],
         customerName: fullName.trim(),
@@ -511,23 +526,16 @@ function CheckoutForm() {
             <fieldset className={styles.fieldset}>
               <legend>Entrega</legend>
               <div className={styles.options}>
-                {(Object.values(SHIPPING_OPTIONS) as Array<(typeof SHIPPING_OPTIONS)[ShippingOptionId]>).map(
-                  (option) => (
-                    <label key={option.id} className={styles.option}>
-                      <input
-                        type="radio"
-                        name="shipping"
-                        value={option.id}
-                        checked={shipping === option.id}
-                        onChange={() => setShipping(option.id)}
-                      />
-                      <span>
-                        <strong>{option.label}</strong>
-                        <small>{option.description}</small>
-                      </span>
-                    </label>
-                  ),
-                )}
+                <p>Informe o endereço e consulte as opções autorizadas por cada loja. O pedido recalcula os valores antes de cobrar.</p>
+                <button type="button" disabled={quoting} onClick={() => void calculateFreight()}>{quoting ? 'Calculando…' : 'Calcular entrega e cupom'}</button>
+                {freight?.result.stores.map((store, i) => <fieldset key={store.sellerId}><legend>Loja {i + 1}</legend>
+                  {!store.options.length && <p>Entrega e retirada indisponíveis para este endereço.</p>}
+                  {store.options.map(option => <label key={option.method}><input type="radio" name={`delivery-${store.sellerId}`} checked={(deliveryChoices.find(c => c.sellerId === store.sellerId)?.method ?? store.selected?.method) === option.method} disabled={option.method === 'NONE'} onChange={() => {if (option.method !== 'NONE') setDeliveryChoices(previous => [...previous.filter(c => c.sellerId !== store.sellerId), {sellerId: store.sellerId, method: option.method as 'PICKUP' | 'DELIVERY'}]);}}/>
+                    {option.method === 'PICKUP' ? 'Retirada' : option.method === 'NONE' ? 'Sem entrega física' : 'Entrega da loja'} — {formatPrice(option.priceCents / 100)} — {option.estimatedDays} dia(s) {option.pickupAddress}
+                  </label>)}
+                </fieldset>)}
+                {freight && !freightCurrent && <p role="status">Endereço, itens, cupom ou opção alterados. Recalcule para confirmar.</p>}
+                <p>Transportadora principal indisponível.</p>
               </div>
             </fieldset>
 
@@ -599,11 +607,11 @@ function CheckoutForm() {
                 <dd>{formatPrice(subtotal)}</dd>
               </div>
               <div>
-                <dt>Entrega ({shippingOption.label})</dt>
-                <dd>Grátis (nesta versão)</dd>
+                <dt>Entrega por loja</dt>
+                <dd>{freightCurrent ? formatPrice(freight.result.shippingCents / 100) : 'A calcular'}</dd>
               </div>
               <div className={styles.totalRow}>
-                <dt>Total</dt>
+                <dt>{freightCurrent ? 'Total com desconto' : 'Subtotal estimado'}</dt>
                 <dd>{formatPrice(total)}</dd>
               </div>
             </dl>

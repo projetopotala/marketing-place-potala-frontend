@@ -1,4 +1,5 @@
 "use client";
+import { FiscalAttachments } from '@/components/orders/FiscalAttachments';
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -61,6 +62,7 @@ function formatDate(iso: string): string {
 }
 
 export function OrdersView() {
+  const [fiscalOrder, setFiscalOrder] = useState<string | null>(null);
   const [sellers, setSellers] = useState<AdminSeller[] | null>(null);
   const [orders, setOrders] = useState<AdminSellerOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +146,7 @@ export function OrdersView() {
           rows={orders ?? []}
           columns={[
             { key: "code", header: "Pedido", render: (row) => row.order.orderNumber },
+            {key: 'fiscal', header: 'Documentos', render: row => <button type="button" onClick={() => setFiscalOrder(row.id)}>Ver documentos privados</button>},
             { key: "seller", header: "Loja", render: (row) => sellerName(row.sellerId) },
             {
               key: "status",
@@ -169,6 +172,7 @@ export function OrdersView() {
           mobileCard={(row) => (
             <>
               <strong>{row.order.orderNumber}</strong>
+              <button type="button" onClick={() => setFiscalOrder(row.id)}>Ver documentos privados</button>
               <span>{sellerName(row.sellerId)}</span>
               <AdminStatusBadge
                 label={SELLER_ORDER_STATUS_LABEL[row.status]}
@@ -182,6 +186,7 @@ export function OrdersView() {
         />
       )}
 
+      {fiscalOrder && <><button type="button" onClick={() => setFiscalOrder(null)}>Fechar documentos</button><FiscalAttachments key={fiscalOrder} sellerOrderId={fiscalOrder} mode="admin" /></>}
       <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
         <button
           type="button"

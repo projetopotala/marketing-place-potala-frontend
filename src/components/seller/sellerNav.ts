@@ -32,6 +32,8 @@ function matchPath(href: string) {
 }
 
 export const SELLER_NAVIGATION: SellerNavItem[] = [
+  { id: "notificacoes", label: "Notificações", href: "/loja/notificacoes", icon: LayoutDashboard, match: matchPath("/loja/notificacoes") },
+ {id:"documentos",label:"Documentos",href:"/loja/documentos",icon:Settings,match:matchPath("/loja/documentos")},
  {id:"atividades",label:"Cursos e eventos",href:"/loja/atividades",icon:LayoutDashboard,match:matchPath("/loja/atividades")},
   {
     id: "dashboard",

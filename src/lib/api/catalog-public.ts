@@ -35,6 +35,8 @@ export interface PublicProductVariant {
 
 /** Mirrors catalog-service's Product model as returned by GET /public/products(/:id) — ACTIVE only, every field the backend actually has (no rating/reviews/seller — those don't exist in this backend, see the mapper below). */
 export interface PublicProduct {
+  itemType?: 'PHYSICAL'|'DIGITAL'|'SERVICE'|'COURSE';
+  attributes?: Record<string,string|number|boolean>;
   id: string;
   sellerId: string;
   title: string;
@@ -103,6 +105,8 @@ export async function listPublicCategories(): Promise<PublicCategory[]> {
 }
 
 export interface ListPublicProductsParams {
+  itemType?: string;
+  attributes?: string;
   limit?: number;
   cursor?: string | null;
   categoryId?: string;
@@ -126,6 +130,8 @@ export async function listPublicProducts(
   params: ListPublicProductsParams = {},
 ): Promise<Paginated<PublicProduct>> {
   const query = new URLSearchParams();
+  if(params.itemType)query.set('itemType',params.itemType);
+  if(params.attributes)query.set('attributes',params.attributes);
   if (params.limit) query.set("limit", String(params.limit));
   if (params.cursor) query.set("cursor", params.cursor);
   if (params.categoryId) query.set("categoryId", params.categoryId);
@@ -259,6 +265,7 @@ export function toStorefrontProduct(
     id: product.id,
     slug: product.id,
     name: product.title,
+    characteristics:Object.entries(product.attributes??{}).map(([key,value])=>({label:key.replaceAll('_',' '),value:typeof value==='boolean'?(value?'Sim':'Não'):String(value)})),
     category: product.category.name,
     categoryId: product.category.id,
     price: product.priceCents / 100,

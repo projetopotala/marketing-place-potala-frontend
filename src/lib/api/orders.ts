@@ -85,6 +85,7 @@ export interface CheckoutShippingAddressInput {
 }
 
 export interface CheckoutInput {
+  deliveryChoices?: Array<{sellerId: string; method: 'PICKUP' | 'DELIVERY' | 'CARRIER'}>;
   paymentMethod?: 'PIX' | 'CARD';
   analyticsConsent?: boolean;
   analyticsSessionId?: string;

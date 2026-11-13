@@ -36,6 +36,8 @@ export default async function CatalogoPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const itemType=Array.isArray(params.tipo)?params.tipo[0]:params.tipo;
+  const attributes=Array.isArray(params.atributos)?params.atributos[0]:params.atributos;
   const query = parseSearchQuery(params.q);
   const order = parseProductSortOrder(params.ordem);
   const rawCategoryParam = Array.isArray(params.categoria)
@@ -44,7 +46,7 @@ export default async function CatalogoPage({
 
   const [categories, page] = await Promise.all([
     listPublicCategories(),
-    listPublicProducts({ limit: 60, q: query || undefined }),
+    listPublicProducts({ limit: 60, q: query || undefined,itemType,attributes }),
   ]);
 
   const selectedCategory = rawCategoryParam

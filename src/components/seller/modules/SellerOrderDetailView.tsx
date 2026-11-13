@@ -1,4 +1,5 @@
 "use client";
+import { FiscalAttachments } from '@/components/orders/FiscalAttachments';
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -124,6 +125,7 @@ export function SellerOrderDetailView() {
           <p>Endereço não disponível.</p>
         )}
       </section>
+      <FiscalAttachments sellerOrderId={sellerOrder.id} mode="seller" />
     </>
   );
 }

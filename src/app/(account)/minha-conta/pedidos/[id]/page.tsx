@@ -1,4 +1,5 @@
 "use client";
+import { FiscalAttachments } from '@/components/orders/FiscalAttachments';
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -146,6 +147,7 @@ export default function AccountOrderDetailPage() {
             {formatPrice(order.totalCents / 100)}
           </p>
 
+          {order.sellerOrders.map(s => <FiscalAttachments key={s.id} sellerOrderId={s.id} mode="customer" />)}
           <section>
             <h2 style={sectionHeadingStyle}>Itens</h2>
             {order.sellerOrders.map((sellerOrder) => (

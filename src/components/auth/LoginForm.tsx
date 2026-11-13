@@ -125,9 +125,8 @@ export function LoginForm({
           {isSubmitting ? "Entrando…" : "Entrar"}
         </button>
 
-        <button type="button" className={styles.disabled} disabled>
-          Esqueci minha senha · Disponível em breve
-        </button>
+        <a href="/recuperar-senha" className={styles.switchBtn}>Esqueci minha senha</a>
+        <a href="/confirmar-email" className={styles.switchBtn}>Confirmar meu e-mail</a>
 
         {error ? (
           <p role="status" className={styles.error}>

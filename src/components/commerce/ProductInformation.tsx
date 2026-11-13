@@ -42,6 +42,7 @@ export function ProductInformation({ product }: ProductInformationProps) {
       {product.description ? (
         <p className={styles.lead}>{product.description}</p>
       ) : null}
+      {!!product.characteristics?.length&&<dl>{product.characteristics.map(attribute=><div key={attribute.label}><dt>{attribute.label}</dt><dd>{attribute.value}</dd></div>)}</dl>}
 
       <div className={styles.priceMobile}>
         <span>{formatPrice(product.price)}</span>

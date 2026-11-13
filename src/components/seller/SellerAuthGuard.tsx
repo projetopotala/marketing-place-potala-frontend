@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { useAuth } from "@/context/AuthContext";
 import styles from "./seller.module.css";
@@ -18,6 +19,7 @@ interface SellerAuthGuardProps {
  */
 export function SellerAuthGuard({ children }: SellerAuthGuardProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isAuthenticated, isHydrated, signOut } = useAuth();
 
   useEffect(() => {
@@ -57,16 +59,17 @@ export function SellerAuthGuard({ children }: SellerAuthGuardProps) {
   // canOperate === false cobre PENDING/REJECTED/SUSPENDED — catalog-service
   // rejeitaria (403) qualquer chamada a /seller/products nesse estado, então
   // a guard intercepta antes de renderizar um painel que só mostraria erros.
-  if (user.sellerCanOperate === false) {
+  if (user.sellerCanOperate === false && pathname !== '/loja/documentos') {
     return (
       <div className={styles.guard} role="status" aria-live="polite">
         <div style={{ maxWidth: 420, textAlign: "center", display: "grid", gap: 12 }}>
-          <h1 style={{ margin: 0 }}>Sua loja está em análise</h1>
+          <h1 style={{ margin: 0 }}>Sua loja ainda não está liberada</h1>
           <p style={{ margin: 0 }}>
-            O cadastro foi recebido e aguarda aprovação do time do Instituto
-            Potala. Você recebe acesso ao painel assim que sua loja for
-            aprovada.
+            Consulte os documentos e o histórico para acompanhar a análise e
+            corrigir solicitações. O catálogo e as vendas dependem da aprovação
+            da loja pelo Instituto Potala.
           </p>
+          <Link href="/loja/documentos">Enviar documentos e acompanhar correções</Link>
           <button
             type="button"
             onClick={() => {

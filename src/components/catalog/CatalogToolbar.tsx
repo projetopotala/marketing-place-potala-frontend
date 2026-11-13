@@ -58,7 +58,7 @@ export function CatalogToolbar({
     ordem?: ProductSortOrder;
     categoria?: string;
   }) {
-    const params = buildCatalogSearchParams({
+    const managed = buildCatalogSearchParams({
       q: next.q ?? currentQuery,
       ordem: next.ordem ?? currentOrder,
       categoria:
@@ -67,6 +67,9 @@ export function CatalogToolbar({
           ? (next.categoria ?? currentCategoryId)
           : undefined),
     });
+    const params = new URLSearchParams(searchParams.toString());
+    for (const key of ['q','ordem','categoria'])params.delete(key);
+    managed.forEach((value,key)=>params.set(key,value));
 
     // Locked category pages keep filters on the same path without categoria param.
     if (lockedCategoryId) {

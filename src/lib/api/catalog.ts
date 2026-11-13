@@ -44,6 +44,8 @@ export interface SellerProductImage {
 
 /** Mirrors catalog-service's Product model as returned by GET /seller/products(/:id). */
 export interface SellerProduct {
+  itemType?: 'PHYSICAL'|'DIGITAL'|'SERVICE'|'COURSE';
+  attributes?: Record<string,string|number|boolean>;
   id: string;
   sellerId: string;
   categoryId: string;

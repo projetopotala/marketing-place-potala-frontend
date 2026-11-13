@@ -11,6 +11,7 @@ import {
 import { ADMIN_SELLER_STATUS_LABEL } from "@/lib/api/admin";
 import styles from "@/components/seller/seller.module.css";
 import { SellerPaymentPreferences } from './SellerPaymentPreferences';
+import { SellerDeliveryPreferences } from './SellerDeliveryPreferences';
 
 /**
  * Real via GET/PATCH /seller/settings (sellers-service, novo nesta
@@ -180,6 +181,7 @@ export function SellerSettingsView() {
         </button>
       </form>
       {settings.membershipRole === 'OWNER' && <SellerPaymentPreferences />}
+      {settings.membershipRole === 'OWNER' && <SellerDeliveryPreferences />}
     </>
   );
 }

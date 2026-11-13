@@ -11,6 +11,7 @@ import {
 import { ApiError } from "@/lib/api/client";
 import { useAdminToast } from "@/components/admin/shared/AdminToastProvider";
 import styles from "@/components/seller/seller.module.css";
+import { ProductDetailsEditor } from '@/features/product-attributes/ProductDetailsEditor';
 
 function formatMoney(cents: number): string {
   return (cents / 100).toLocaleString("pt-BR", {
@@ -147,6 +148,7 @@ export function SellerProductDetailView() {
 
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Detalhes</h2>
+        <ProductDetailsEditor key={product.updatedAt} product={product} onSaved={setProduct}/>
         <dl style={{ display: "grid", gap: 8 }}>
           <div>
             <strong>Descrição:</strong> {product.description || "—"}
@@ -162,8 +164,7 @@ export function SellerProductDetailView() {
           </div>
         </dl>
         <p className={styles.pageLead} style={{ marginTop: 12 }}>
-          Título, descrição, preço e imagens só podem ser definidos na
-          criação — edição e upload de imagem ainda não existem no backend.
+          As alterações de preço afetam novas compras. Pedidos existentes preservam os valores registrados na compra.
         </p>
       </section>
 

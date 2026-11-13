@@ -59,6 +59,7 @@ function formatDate(value: string): string {
 }
 
 function formatDiscount(coupon: Pick<Coupon, "discountType" | "discountValue">): string {
+  if (coupon.discountType === 'SHIPPING') return 'Frete grátis';
   return coupon.discountType === "PERCENT"
     ? `${coupon.discountValue}%`
     : (coupon.discountValue / 100).toLocaleString("pt-BR", {
@@ -211,7 +212,7 @@ export function CouponsView() {
       code: form.code.trim().toUpperCase(),
       name: form.name.trim(),
       discountType: form.discountType,
-      discountValue: form.discountValue,
+      discountValue: form.discountType === 'SHIPPING' ? 1 : form.discountValue,
       startsAt: fromDatetimeLocalValue(form.startsAt),
       endsAt: fromDatetimeLocalValue(form.endsAt),
       enabled: form.enabled,
@@ -444,6 +445,7 @@ export function CouponsView() {
               >
                 <option value="PERCENT">Percentual</option>
                 <option value="FIXED">Valor fixo (centavos)</option>
+                <option value="SHIPPING">Frete grátis</option>
               </select>
             </div>
             <div className={sharedStyles.field}>
@@ -453,6 +455,7 @@ export function CouponsView() {
                 type="number"
                 min={1}
                 max={form.discountType === "PERCENT" ? 100 : 1_000_000}
+                disabled={form.discountType === 'SHIPPING'}
                 value={form.discountValue}
                 onChange={(e) =>
                   setForm({ ...form, discountValue: Number(e.target.value) || 0 })

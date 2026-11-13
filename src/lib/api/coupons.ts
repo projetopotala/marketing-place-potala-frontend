@@ -12,7 +12,7 @@ import type { Paginated } from "./admin";
  * schema.prisma no backend).
  */
 
-export type CouponDiscountType = "PERCENT" | "FIXED";
+export type CouponDiscountType = "PERCENT" | "FIXED" | "SHIPPING";
 
 /** Derivado no backend (CouponsService.deriveStatus) a partir de enabled + startsAt/endsAt -- nunca uma coluna própria. */
 export type CouponStatus = "active" | "scheduled" | "expired" | "disabled";

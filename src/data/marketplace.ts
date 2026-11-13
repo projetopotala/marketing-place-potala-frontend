@@ -669,7 +669,11 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { label: "Como Comprar", href: "/catalogo" },
       { label: "Trocas e Devoluções", href: "/minha-conta/devolucoes" },
       { label: "Formas de Pagamento", href: "/#contato" },
-      { label: "Política de Privacidade", href: "/#contato" },
+      { label: "Política de Privacidade", href: "/privacidade" },
+      { label: "Termos de uso", href: "/termos" },
+      { label: "Cookies", href: "/cookies" },
+      { label: "Compra, troca e cancelamento", href: "/compra-troca-cancelamento" },
+      { label: "Adesão de parceiros", href: "/adesao-parceiro" },
     ],
   },
   {

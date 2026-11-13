@@ -6,6 +6,7 @@ import type {
 } from "@/types/account";
 
 export const ACCOUNT_SIDEBAR_ITEMS: AccountSidebarItem[] = [
+  { id: "notificacoes", label: "Notificações", href: "/minha-conta/notificacoes", available: true },
   {id:"inscricoes",label:"Minhas inscrições",href:"/minha-conta/inscricoes",available:true},
   {id:"agenda",label:"Minha agenda",href:"/minha-conta/agenda",available:true},
   {id:"downloads",label:"Materiais e downloads",href:"/minha-conta/downloads",available:true},

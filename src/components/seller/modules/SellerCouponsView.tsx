@@ -92,7 +92,7 @@ export function SellerCouponsView() {
                     <td>{coupon.code}</td>
                     <td>{coupon.name}</td>
                     <td>
-                      {coupon.discountType === "PERCENT"
+                      {coupon.discountType === 'SHIPPING' ? 'Frete grátis' : coupon.discountType === "PERCENT"
                         ? `${coupon.discountValue}%`
                         : (coupon.discountValue / 100).toLocaleString("pt-BR", {
                             style: "currency",

@@ -8,6 +8,7 @@ import type { ProductSortOrder } from "@/features/catalog/selectors";
 import type { Product } from "@/types/marketplace";
 import Link from "next/link";
 import { Suspense } from "react";
+import { AttributeFilters } from '@/features/product-attributes/AttributeFilters';
 
 export interface CatalogBreadcrumbItem {
   label: string;
@@ -106,6 +107,7 @@ export function CatalogListing({
         />
       </Suspense>
 
+      <Suspense fallback={null}><AttributeFilters/></Suspense>
       {products.length === 0 ? (
         <div
           className="mt-8 rounded-md border border-dashed border-potala-border bg-potala-panel/40 px-5 py-10 text-center"
