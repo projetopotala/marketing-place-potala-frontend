@@ -21,7 +21,7 @@ import type {
  */
 
 export const ANNOUNCEMENT_TEXT =
-  "Frete grátis para todo o Brasil em compras acima de R$ 299";
+  "Entrega e retirada conforme as opções de cada loja";
 
 export const BRAND = {
   name: "Instituto Potala",

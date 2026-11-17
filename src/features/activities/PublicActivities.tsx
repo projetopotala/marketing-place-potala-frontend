@@ -12,35 +12,45 @@ import {
 } from "@/lib/api/activities";
 import s from "./activities.module.css";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { ApiError } from "@/lib/api/client";
+
+function activityLoadError(error: unknown) {
+  return error instanceof ApiError && error.status >= 500
+    ? "Não foi possível carregar as atividades agora. Tente novamente em instantes."
+    : error instanceof Error ? error.message : "Não foi possível carregar as atividades.";
+}
+
 export function ActivityList({ kind }: { kind?: ActivityKind }) {
-  const [items, setItems] = useState<Activity[]>([]),
-    [error, setError] = useState(""),
-    [loading, setLoading] = useState(true);
-  const [nextCursor, setNextCursor] = useState<string | null>(null),
-    [moreLoading, setMoreLoading] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const key = `${kind ?? "ALL"}:${attempt}`;
+  const [result, setResult] = useState<{key: string; items: Activity[]; nextCursor: string | null; error: string} | null>(null);
+  const [moreLoading, setMoreLoading] = useState(false);
+  const loading = result?.key !== key;
+  const items = loading ? [] : result.items;
+  const error = loading ? "" : result.error;
+  const nextCursor = loading ? null : result.nextCursor;
   async function loadMore() {
-    if (!nextCursor) return;
+    if (!nextCursor || moreLoading) return;
     setMoreLoading(true);
     try {
       const page = await activityApi.list(kind, nextCursor);
-      setItems((prev) => [...prev, ...(page?.items ?? [])]);
-      setNextCursor(page?.pageInfo.nextCursor ?? null);
+      setResult(prev => prev?.key === key ? {...prev, items: [...prev.items, ...(page?.items ?? [])], nextCursor: page?.pageInfo.nextCursor ?? null, error: ""} : prev);
     } catch (e) {
-      setError((e as Error).message);
+      setResult(prev => prev?.key === key ? {...prev, error: activityLoadError(e)} : prev);
     } finally {
       setMoreLoading(false);
     }
   }
   useEffect(() => {
+    let active = true;
     activityApi
       .list(kind)
       .then((page) => {
-        setItems(page?.items ?? []);
-        setNextCursor(page?.pageInfo.nextCursor ?? null);
+        if (active) setResult({key, items: page?.items ?? [], nextCursor: page?.pageInfo.nextCursor ?? null, error: ""});
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [kind]);
+      .catch((e) => {if (active) setResult({key, items: [], nextCursor: null, error: activityLoadError(e)});});
+    return () => {active = false;};
+  }, [kind, key]);
   return (
     <main className={s.page}>
       <h1>
@@ -57,13 +67,14 @@ export function ActivityList({ kind }: { kind?: ActivityKind }) {
         <Link href="/minha-conta/inscricoes">Minhas inscrições</Link>
       </nav>
       {error && (
-        <p role="alert" className={s.error}>
-          {error}
-        </p>
+        <div role="alert" className={s.error}>
+          <p>{error}</p>
+          <button type="button" onClick={() => setAttempt(value => value + 1)}>Tentar novamente</button>
+        </div>
       )}
       {loading ? (
         <p>Carregando atividades…</p>
-      ) : !items.length ? (
+      ) : error && !items.length ? null : !items.length ? (
         <p>Nenhuma atividade publicada neste momento.</p>
       ) : (
         <div className={s.grid}>

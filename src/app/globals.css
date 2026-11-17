@@ -1642,6 +1642,9 @@ img {
   --potala-bg: #041126;
   --potala-text: #f5efe2;
   --potala-cream: #f5efe2;
+  --color-potala-text: #f5efe2;
+  --color-potala-cream: #f5efe2;
+  --color-potala-gold: #e8c878;
 }
 
 .potala-btn-primary { color: #35332f; }
