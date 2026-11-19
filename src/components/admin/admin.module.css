@@ -3,13 +3,13 @@
   --admin-sidebar: var(--potala-navy-950);
   --admin-surface: var(--potala-navy-800);
   --admin-elevated: var(--potala-navy-750);
-  --admin-border: #a77924;
-  --admin-gold: #694b21;
-  --admin-text: #292824;
-  --admin-muted: #514c43;
-  --admin-success: #286039;
-  --admin-warning: #77500e;
-  --admin-danger: #a12626;
+  --admin-border: var(--potala-border);
+  --admin-gold: var(--potala-gold-500);
+  --admin-text: var(--potala-text-primary);
+  --admin-muted: var(--potala-text-secondary);
+  --admin-success: var(--potala-success);
+  --admin-warning: var(--potala-warning);
+  --admin-danger: var(--potala-danger);
   display: grid;
   grid-template-columns: var(--admin-sidebar-width, 240px) minmax(0, 1fr);
   min-height: 100dvh;
@@ -81,7 +81,7 @@
   font-weight: 600;
   letter-spacing: 0.28em;
   text-transform: uppercase;
-  color: var(--admin-gold);
+  color: #e8c878;
 }
 
 .logoName {
@@ -309,7 +309,7 @@
 }
 
 .logoutBtn:hover {
-  border-color: var(--admin-border);
+  border-color: rgba(213, 166, 79, 0.45);
   color: var(--admin-gold);
 }
 
@@ -330,7 +330,7 @@
   gap: 12px;
   padding: 14px 24px;
   border-bottom: 1px solid var(--admin-border);
-  background: var(--admin-surface);
+  background: rgba(4, 16, 32, 0.72);
   backdrop-filter: blur(8px);
   position: sticky;
   top: 0;
@@ -372,7 +372,7 @@
 }
 
 .searchInput:focus {
-  outline: 2px solid var(--admin-border);
+  outline: 2px solid rgba(213, 166, 79, 0.45);
   outline-offset: 1px;
 }
 
@@ -392,7 +392,7 @@
 }
 
 .searchTrigger:focus-visible {
-  outline: 2px solid var(--admin-border);
+  outline: 2px solid rgba(213, 166, 79, 0.45);
   outline-offset: 1px;
 }
 
@@ -482,7 +482,7 @@
 
 .topLogout:hover {
   color: var(--admin-text);
-  border-color: var(--admin-border);
+  border-color: rgba(213, 166, 79, 0.4);
 }
 
 .pageHeader {
@@ -554,7 +554,7 @@
   place-items: center;
   background: rgba(213, 166, 79, 0.12);
   color: var(--admin-gold);
-  border: 1px solid var(--admin-border);
+  border: 1px solid rgba(213, 166, 79, 0.25);
 }
 
 .metricLabel {
@@ -680,7 +680,7 @@
 
 .summaryItem {
   background: var(--admin-elevated);
-  border: 1px solid var(--admin-border);
+  border: 1px solid rgba(213, 166, 79, 0.14);
   border-radius: 8px;
   padding: 8px 10px;
 }
@@ -724,7 +724,7 @@
   place-items: center;
   text-align: center;
   padding: 8px;
-  border: 1px solid var(--admin-border);
+  border: 1px solid rgba(213, 166, 79, 0.12);
 }
 
 .donutTotalLabel {
@@ -806,7 +806,7 @@
   color: var(--admin-muted);
   font-weight: 600;
   padding: 8px 6px;
-  border-bottom: 1px solid var(--admin-border);
+  border-bottom: 1px solid rgba(213, 166, 79, 0.18);
   white-space: nowrap;
 }
 
@@ -887,7 +887,7 @@
   padding: 10px 12px;
   border-radius: 8px;
   background: var(--admin-elevated);
-  border: 1px solid var(--admin-border);
+  border: 1px solid rgba(213, 166, 79, 0.12);
 }
 
 .financeLabel {
@@ -919,7 +919,7 @@
 .alertItem,
 .approvalItem {
   border-radius: 8px;
-  border: 1px solid var(--admin-border);
+  border: 1px solid rgba(213, 166, 79, 0.14);
   background: var(--admin-elevated);
   padding: 10px 12px;
 }
