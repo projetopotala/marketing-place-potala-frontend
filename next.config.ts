@@ -3,6 +3,11 @@ import path from "path";
 import legacyRedirects from "./legacy-redirects.json";
 
 const nextConfig: NextConfig = {
+  async rewrites() {
+    const upstream = (process.env.API_UPSTREAM_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1").replace(/\/$/, "");
+    if (!/^https?:\/\//.test(upstream)) throw new Error("API upstream must be an absolute HTTP URL");
+    return [{ source: "/api/v1/:path*", destination: `${upstream}/:path*` }];
+  },
   redirects() {
     const sources = new Set<string>();
     for (const entry of legacyRedirects) {
@@ -36,3 +41,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
