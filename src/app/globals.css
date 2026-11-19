@@ -63,12 +63,12 @@
   --admin-surface: var(--potala-navy-800);
   --admin-elevated: var(--potala-navy-750);
   --admin-border: var(--potala-border);
-  --admin-gold: var(--potala-gold-500);
-  --admin-text: var(--potala-text-primary);
-  --admin-muted: var(--potala-text-secondary);
-  --admin-success: var(--potala-success);
-  --admin-warning: var(--potala-warning);
-  --admin-danger: var(--potala-danger);
+  --admin-gold: #694b21;
+  --admin-text: #292824;
+  --admin-muted: #514c43;
+  --admin-success: #286039;
+  --admin-warning: #77500e;
+  --admin-danger: #a12626;
 
   /* Aliases legados (storefront / conta) */
   --potala-bg: var(--potala-navy-900);

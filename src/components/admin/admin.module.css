@@ -4,12 +4,12 @@
   --admin-surface: var(--potala-navy-800);
   --admin-elevated: var(--potala-navy-750);
   --admin-border: var(--potala-border);
-  --admin-gold: var(--potala-gold-500);
-  --admin-text: var(--potala-text-primary);
-  --admin-muted: var(--potala-text-secondary);
-  --admin-success: var(--potala-success);
-  --admin-warning: var(--potala-warning);
-  --admin-danger: var(--potala-danger);
+  --admin-gold: #694b21;
+  --admin-text: #292824;
+  --admin-muted: #514c43;
+  --admin-success: #286039;
+  --admin-warning: #77500e;
+  --admin-danger: #a12626;
   display: grid;
   grid-template-columns: var(--admin-sidebar-width, 240px) minmax(0, 1fr);
   min-height: 100dvh;
@@ -81,7 +81,7 @@
   font-weight: 600;
   letter-spacing: 0.28em;
   text-transform: uppercase;
-  color: #e8c878;
+  color: var(--admin-gold);
 }
 
 .logoName {
@@ -330,7 +330,7 @@
   gap: 12px;
   padding: 14px 24px;
   border-bottom: 1px solid var(--admin-border);
-  background: rgba(4, 16, 32, 0.72);
+  background: var(--admin-surface);
   backdrop-filter: blur(8px);
   position: sticky;
   top: 0;
