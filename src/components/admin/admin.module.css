@@ -3,7 +3,7 @@
   --admin-sidebar: var(--potala-navy-950);
   --admin-surface: var(--potala-navy-800);
   --admin-elevated: var(--potala-navy-750);
-  --admin-border: var(--potala-border);
+  --admin-border: #a77924;
   --admin-gold: #694b21;
   --admin-text: #292824;
   --admin-muted: #514c43;
@@ -309,7 +309,7 @@
 }
 
 .logoutBtn:hover {
-  border-color: rgba(213, 166, 79, 0.45);
+  border-color: var(--admin-border);
   color: var(--admin-gold);
 }
 
@@ -372,7 +372,7 @@
 }
 
 .searchInput:focus {
-  outline: 2px solid rgba(213, 166, 79, 0.45);
+  outline: 2px solid var(--admin-border);
   outline-offset: 1px;
 }
 
@@ -392,7 +392,7 @@
 }
 
 .searchTrigger:focus-visible {
-  outline: 2px solid rgba(213, 166, 79, 0.45);
+  outline: 2px solid var(--admin-border);
   outline-offset: 1px;
 }
 
@@ -482,7 +482,7 @@
 
 .topLogout:hover {
   color: var(--admin-text);
-  border-color: rgba(213, 166, 79, 0.4);
+  border-color: var(--admin-border);
 }
 
 .pageHeader {
@@ -554,7 +554,7 @@
   place-items: center;
   background: rgba(213, 166, 79, 0.12);
   color: var(--admin-gold);
-  border: 1px solid rgba(213, 166, 79, 0.25);
+  border: 1px solid var(--admin-border);
 }
 
 .metricLabel {
@@ -680,7 +680,7 @@
 
 .summaryItem {
   background: var(--admin-elevated);
-  border: 1px solid rgba(213, 166, 79, 0.14);
+  border: 1px solid var(--admin-border);
   border-radius: 8px;
   padding: 8px 10px;
 }
@@ -724,7 +724,7 @@
   place-items: center;
   text-align: center;
   padding: 8px;
-  border: 1px solid rgba(213, 166, 79, 0.12);
+  border: 1px solid var(--admin-border);
 }
 
 .donutTotalLabel {
@@ -806,7 +806,7 @@
   color: var(--admin-muted);
   font-weight: 600;
   padding: 8px 6px;
-  border-bottom: 1px solid rgba(213, 166, 79, 0.18);
+  border-bottom: 1px solid var(--admin-border);
   white-space: nowrap;
 }
 
@@ -887,7 +887,7 @@
   padding: 10px 12px;
   border-radius: 8px;
   background: var(--admin-elevated);
-  border: 1px solid rgba(213, 166, 79, 0.12);
+  border: 1px solid var(--admin-border);
 }
 
 .financeLabel {
@@ -919,7 +919,7 @@
 .alertItem,
 .approvalItem {
   border-radius: 8px;
-  border: 1px solid rgba(213, 166, 79, 0.14);
+  border: 1px solid var(--admin-border);
   background: var(--admin-elevated);
   padding: 10px 12px;
 }
