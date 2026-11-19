@@ -1,0 +1,14 @@
+.inbox { display: grid; gap: 16px; padding-block: 16px; color: #292824; }
+.card { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 24px; background: #f7ecd5; border: 1px solid #a77924; border-left-width: 4px; border-radius: 12px; }
+.card h2 { flex-basis: 100%; margin: 0; font-size: 1.2rem; font-weight: 650; line-height: 1.4; }
+.card p { flex-basis: 100%; margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+.card time { color: #514c43; font-size: .85rem; }
+.badge { border: 1px solid #a77924; border-radius: 20px; padding: 4px 10px; font-size: .8rem; font-weight: 600; background: #eedbb2; }
+.action, .secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border: 1px solid #805c1b; border-radius: 8px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.action { background: #805c1b; color: #fff; }
+.secondary { background: transparent; color: #513b16; }
+.action:hover { background: #624513; }
+.secondary:hover { background: #eedbb2; }
+.action:focus-visible, .secondary:focus-visible { outline: 3px solid #292824; outline-offset: 3px; }
+.error { padding: 16px; border: 1px solid #a12626; border-radius: 8px; background: #fff1eb; color: #8c2424; }
+@media (max-width: 600px) { .card { padding: 16px; } .card time { flex-basis: 100%; } }

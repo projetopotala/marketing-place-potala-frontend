@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api/client";
 import Link from "next/link";
+import styles from "./notifications.module.css";
 type Notice = {
   id: string;
   title: string;
@@ -33,8 +34,8 @@ export function NotificationsInbox() {
     }
   }
   return (
-    <section>
-      {error && <p role="alert">{error}</p>}
+    <section className={styles.inbox} aria-label="Mensagens e notificações">
+      {error && <p className={styles.error} role="alert">{error}</p>}
       {loading ? (
         <p>Carregando…</p>
       ) : (
@@ -43,16 +44,17 @@ export function NotificationsInbox() {
       {items.map((item) => (
         <article
           key={item.id}
-          style={{ padding: 16, borderBottom: "1px solid #ddd" }}
+          className={styles.card}
         >
+          <span className={styles.badge}>{item.readAt ? "Lida" : "Nova mensagem"}</span>
           <h2>{item.title}</h2>
           <p>{item.message}</p>
-          <Link href={item.href}>Consultar na minha conta</Link>
+          <Link className={styles.action} href={item.href}>Ver detalhes</Link>
           <time dateTime={item.createdAt}>
             {new Date(item.createdAt).toLocaleString("pt-BR")}
           </time>
           {!item.readAt && (
-            <button onClick={() => read(item.id)} style={{ marginLeft: 16 }}>
+            <button onClick={() => read(item.id)} className={styles.secondary}>
               Marcar como lida
             </button>
           )}

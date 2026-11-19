@@ -3,10 +3,10 @@
   --seller-sidebar: var(--potala-navy-950);
   --seller-surface: var(--potala-navy-800);
   --seller-elevated: var(--potala-navy-750);
-  --seller-border: var(--potala-border);
-  --seller-gold: var(--potala-gold-500);
-  --seller-text: var(--potala-text-primary);
-  --seller-muted: var(--potala-text-secondary);
+  --seller-border: #a77924;
+  --seller-gold: #694b21;
+  --seller-text: #292824;
+  --seller-muted: #514c43;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
@@ -104,7 +104,7 @@
   min-height: 68px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--seller-border);
-  background: rgba(4, 16, 32, 0.85);
+  background: var(--seller-surface);
   backdrop-filter: blur(8px);
 }
 
@@ -269,7 +269,7 @@
 
 .primaryBtn {
   border: 1px solid var(--seller-gold);
-  background: var(--seller-gold);
+  background: #d5a64f;
   color: var(--potala-text-primary);
 }
 
