@@ -80,4 +80,9 @@ export const ADMIN_NAVIGATION: AdminNavigationItem[] = ADMIN_NAV.map(
 );
 
 export const AdminLogoutIcon = LogOut;
+ADMIN_NAVIGATION.push(
+  {id:'notificacoes',label:'Notificações',href:'/admin/notificacoes',icon:BookOpen,match:matchExactOrChild('/admin/notificacoes')},
+  {id:'documentos-legais',label:'Documentos legais',href:'/admin/documentos-legais',icon:BookOpen,match:matchExactOrChild('/admin/documentos-legais')},
+  {id:'documentos-parceiros',label:'Documentos de parceiros',href:'/admin/documentos-parceiros',icon:Store,match:matchExactOrChild('/admin/documentos-parceiros')},
+);
 export const ADMIN_ICON_STROKE = 1.75;

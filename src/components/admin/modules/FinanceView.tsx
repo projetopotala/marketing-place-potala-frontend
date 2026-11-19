@@ -14,6 +14,7 @@ import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
 import { AdminMetricCard, AdminMetricsRow } from "@/components/admin/shared/AdminMetricCard";
 import { AdminDataTable, sharedStyles } from "@/components/admin/shared/AdminDataTable";
 import { AdminStatusBadge, AdminEmptyState } from "@/components/admin/shared/AdminStatusBadge";
+import { FinancialPolicies } from './FinancialPolicies';
 
 /**
  * Real financeiro admin, via GET /admin/orders (orders-service, novo este
@@ -189,9 +190,11 @@ export function FinanceView() {
 
   return (
     <div className={sharedStyles.stack}>
+      <p>Gateway indisponível. Líquidos e taxas representam snapshots do pedido; repasses e estornos não foram executados.</p>
+      <FinancialPolicies />
       <AdminPageHeader
         title="Financeiro"
-        description={`Faturamento por status de pagamento em toda a plataforma, calculado a partir dos pedidos reais (até os ${SUMMARY_LIMIT} mais recentes).`}
+        description={`Valores brutos das linhas, antes dos descontos, por status de pagamento (até os ${SUMMARY_LIMIT} pedidos mais recentes).`}
       />
 
       {isSummaryLoading ? (
@@ -206,7 +209,7 @@ export function FinanceView() {
       ) : (
         <AdminMetricsRow>
           <AdminMetricCard
-            label="Pago"
+            label="Bruto pago"
             value={formatMoney(summary.paidCents)}
             hint={`${summary.paidCount} pedido(s)`}
             icon={WalletCards}
@@ -248,7 +251,11 @@ export function FinanceView() {
                 />
               ),
             },
-            { key: "value", header: "Valor", render: (row) => formatMoney(row.subtotalCents) },
+            { key: "value", header: "Bruto", render: (row) => formatMoney(row.subtotalCents) },
+            { key: "discount", header: "Desconto", render: (row) => row.financialSnapshot ? formatMoney(row.discountCents ?? 0) : '—' },
+            { key: "commission", header: "Comissão", render: (row) => row.financialSnapshot ? formatMoney(row.commissionCents) : '—' },
+            { key: "fee", header: "Taxas", render: (row) => row.financialSnapshot ? formatMoney(row.gatewayFeeCents ?? 0) : '—' },
+            { key: "net", header: "Líquido previsto", render: (row) => row.financialSnapshot ? formatMoney(row.sellerNetCents) : '—' },
           ]}
           mobileCard={(row) => (
             <>
