@@ -4,6 +4,37 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Accessible defaults for controls without a component-specific treatment. */
+@layer base {
+  button, input::file-selector-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 16px;
+    border: 1px solid #805c1b;
+    border-radius: 8px;
+    background: #805c1b;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 3px solid #513b16;
+    outline-offset: 3px;
+  }
+  input:not([type=checkbox]):not([type=radio]):not([type=hidden]), select, textarea {
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid #a77924;
+    border-radius: 8px;
+    background: #fffaf0;
+    color: #292824;
+  }
+  input::file-selector-button { margin-right: 12px; }
+}
+
 :root {
   /* Paleta areia. Os nomes legados preservam os consumidores existentes. */
   --potala-navy-950: #cfb381;

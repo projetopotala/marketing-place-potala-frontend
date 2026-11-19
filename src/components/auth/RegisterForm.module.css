@@ -139,3 +139,7 @@
   cursor: pointer;
   text-decoration: underline;
 }
+
+.switchBtn { border: 1px solid #805c1b; border-radius: 8px; padding: 10px 16px; min-height: 44px; background: #f7ecd5; color: #513b16; text-decoration: none; }
+.switchBtn:hover { background: #eedbb2; }
+.error { color: #a12626; }

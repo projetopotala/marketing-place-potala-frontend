@@ -1,4 +1,5 @@
 "use client";
+import styles from "@/components/legal/forms.module.css";
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api/client';
 type Rate = {state: string; postalCodeFrom?: string; postalCodeTo?: string; priceCents: number; estimatedDays: number};
@@ -13,7 +14,7 @@ export function SellerDeliveryPreferences() {
     try { await apiFetch('/seller/settings/delivery', {method: 'PUT', body: JSON.stringify({...value, pickupAddress: value.pickupAddress ?? ''})}); setMessage('Preferências de entrega salvas.'); } catch(e) {setMessage(e instanceof Error ? e.message : 'Falha ao salvar');} finally {setBusy(false);}
   }
   function rate(index: number, patch: Partial<Rate>) {setValue(v => ({...v, rates: v.rates.map((r, i) => i === index ? {...r, ...patch} : r)}));}
-  return <section aria-label="Entrega e retirada"><h3>Entrega e retirada</h3>
+  return <section className={styles.panel} aria-label="Entrega e retirada"><h3>Entrega e retirada</h3>
     <label><input type="checkbox" checked={value.pickupEnabled} onChange={e => setValue({...value, pickupEnabled: e.target.checked})}/> Permitir retirada gratuita</label>
     <label>Endereço e instruções para retirada<input maxLength={500} value={value.pickupAddress ?? ''} onChange={e => setValue({...value, pickupAddress: e.target.value})}/></label>
     <label><input type="checkbox" checked={value.deliveryEnabled} onChange={e => setValue({...value, deliveryEnabled: e.target.checked})}/> Oferecer entrega própria</label>
