@@ -1738,14 +1738,14 @@ body:has(#topo, #seller-sidebar) {
 }
 
 body:has(#topo) #topo {
-  --potala-bg: #e9dfbf;
-  --potala-bg-secondary: #e5d8b5;
+  --potala-bg: #f5f0e6;
+  --potala-bg-secondary: #ede5d7;
   --potala-panel: #fffdf7;
-  background-color: #e9dfbf;
+  background-color: #f5f0e6;
 }
 
 body:has(#topo) .potala-announcement {
-  background-color: #d5c897;
+  background-color: #ede5d7;
 }
 
 body:has(#topo) #topo button {
