@@ -317,7 +317,7 @@ test.describe("admin rotas e modal", () => {
     }
   });
 
-  test("Entregas consulta dados reais sem oferecer mutações administrativas", async ({ page, context }) => {
+  test("Entregas consulta dados reais e preserva limites do fulfillment", async ({ page, context }) => {
     await loginAs(context, "admin");
     await page.goto("/admin/entregas");
     await expect(page.getByRole("heading", { name: "Entregas" })).toBeVisible({
@@ -327,8 +327,7 @@ test.describe("admin rotas e modal", () => {
       timeout: 15_000,
     });
     await expect(page.getByRole("combobox", { name: "Filtrar entregas por status" })).toBeVisible();
-    await expect(page.getByText(/alteração administrativa de status não são expostos/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /marcar como (enviado|entregue)|iniciar preparo/i })).toHaveCount(0);
+    await expect(page.getByText(/confirmação de pagamento continua exclusiva do fluxo financeiro/i)).toBeVisible();
   });
 
   /**

@@ -189,6 +189,26 @@ export async function listAdminOrders(params?: {
   return result ?? { items: [], pageInfo: { hasNextPage: false, nextCursor: null } };
 }
 
+/**
+ * Ações administrativas de fulfillment são etapas explícitas, nunca um
+ * status arbitrário. O orders-service registra o administrador autenticado
+ * no histórico e na outbox. PENDING -> CONFIRMED continua pertencendo
+ * exclusivamente ao fluxo de pagamento aprovado.
+ */
+export async function advanceAdminSellerOrder(
+  id: string,
+  action: "prepare" | "ship" | "deliver",
+): Promise<AdminSellerOrder> {
+  const result = await apiFetch<AdminSellerOrder>(
+    `/admin/orders/${encodeURIComponent(id)}/${action}`,
+    { method: "PATCH" },
+  );
+  if (!result) {
+    throw new Error("Resposta vazia do servidor.");
+  }
+  return result;
+}
+
 /** Mirrors identity-service's Prisma UserStatus enum. */
 export type AdminCustomerStatus = "ACTIVE" | "BLOCKED" | "PENDING_VERIFICATION";
 
