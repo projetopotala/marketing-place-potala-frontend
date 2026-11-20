@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChartNoAxesCombined, Package, ShoppingBag, Store, Truck, WalletCards } from "lucide-react";
-import { ADMIN_SELLER_STATUS_LABEL, listAdminCategories, listAdminOrders, listAdminSellers, type AdminSeller, type AdminSellerOrder } from "@/lib/api/admin";
+import { ADMIN_SELLER_STATUS_LABEL, listAdminOrders, listAdminSellers, type AdminSeller, type AdminSellerOrder } from "@/lib/api/admin";
 import { listPublicProducts, type PublicProduct } from "@/lib/api/catalog-public";
 import { ApiError } from "@/lib/api/client";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/api/orders";
@@ -20,7 +20,7 @@ import adminStyles from "@/components/admin/admin.module.css";
 
 const LIMIT = 100;
 const PAID: OrderStatus[] = ["PAID", "FULFILLING", "COMPLETED"];
-type Data = { sellers: AdminSeller[]; products: PublicProduct[]; orders: AdminSellerOrder[]; categories: number; more: { sellers: boolean; products: boolean; orders: boolean } };
+type Data = { sellers: AdminSeller[]; products: PublicProduct[]; orders: AdminSellerOrder[]; more: { sellers: boolean; products: boolean; orders: boolean } };
 
 const icons = { sellers: Store, products: Package, today: ShoppingBag, month: ChartNoAxesCombined, revenue: WalletCards, delivery: Truck };
 const money = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -63,10 +63,10 @@ export function DashboardView() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [sellerPage, categories, productPage, orderPage] = await Promise.all([
-        listAdminSellers({ limit: LIMIT }), listAdminCategories(), listPublicProducts({ limit: LIMIT }), listAdminOrders({ limit: LIMIT }),
+      const [sellerPage, productPage, orderPage] = await Promise.all([
+        listAdminSellers({ limit: LIMIT }), listPublicProducts({ limit: LIMIT }), listAdminOrders({ limit: LIMIT }),
       ]);
-      setData({ sellers: sellerPage.items, products: productPage.items, orders: orderPage.items, categories: categories.length, more: { sellers: sellerPage.pageInfo.hasNextPage, products: productPage.pageInfo.hasNextPage, orders: orderPage.pageInfo.hasNextPage } });
+      setData({ sellers: sellerPage.items, products: productPage.items, orders: orderPage.items, more: { sellers: sellerPage.pageInfo.hasNextPage, products: productPage.pageInfo.hasNextPage, orders: orderPage.pageInfo.hasNextPage } });
     } catch (cause) {
       setData(null);
       setError(cause instanceof ApiError ? cause.message : "Não foi possível carregar os dados do dashboard.");
