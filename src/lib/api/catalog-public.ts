@@ -1,4 +1,4 @@
-import { ApiError, apiFetch } from "./client";
+import { apiFetch } from "./client";
 import type { Product, ProductImage as StorefrontProductImage, ProductReviewItem } from "@/types/marketplace";
 import type { RatingSummaryResponse, ReviewResponse } from "./reviews";
 
@@ -75,42 +75,33 @@ export interface Paginated<T> {
  * timeout (ou a ausência deliberada de um, no caso do POST checkout).
  */
 const PUBLIC_CATALOG_TIMEOUT_MS = 20_000;
-const PUBLIC_CATALOG_RETRY_DELAY_MS = 500;
-
-function isRetryableCatalogError(error: unknown): boolean {
-  if (!(error instanceof ApiError)) return false;
-  return error.status === 0 || error.status === 502 || error.status === 503 || error.status === 504;
-}
-
-/**
- * A short retry absorbs a transient cold start or gateway hand-off. A
- * persistent outage is intentionally propagated to the storefront error
- * boundary instead of being misrepresented as an empty catalog.
- */
-async function fetchPublicCatalog<T>(path: string): Promise<T | null> {
-  const request = () => apiFetch<T>(path, {
-    signal: AbortSignal.timeout(PUBLIC_CATALOG_TIMEOUT_MS),
-  });
-
-  try {
-    return await request();
-  } catch (error) {
-    if (!isRetryableCatalogError(error)) throw error;
-    console.warn("[catalog-public] temporary catalog failure; retrying once:", error);
-    await new Promise<void>((resolve) => setTimeout(resolve, PUBLIC_CATALOG_RETRY_DELAY_MS));
-    return request();
-  }
-}
 
 /**
  * GET /public/categories — active categories, no auth.
  *
- * A legitimate 200 with no categories stays an empty list. Network/gateway
- * failures retry once and then reach the storefront error boundary, so an
- * unavailable catalog cannot be mistaken for one that simply has no data.
+ * Swallows any failure (network error, gateway 502/503/504, catalog-service
+ * cold-starting on Render's free tier, etc.) and returns an empty list
+ * instead of throwing. This is a storefront page used by anonymous
+ * shoppers — every caller here (FeaturedCategories, categoria/[slug],
+ * catalogo, novidades, ofertas) already treats an empty result as "nothing
+ * to show" and degrades gracefully (renders `null`/an empty state) rather
+ * than crashing the whole page with a 500. Logged so the failure is still
+ * visible in Vercel's function logs, just no longer fatal to the request.
+ *
+ * `signal: AbortSignal.timeout(...)` (ver PUBLIC_CATALOG_TIMEOUT_MS acima)
+ * garante que esse catch é alcançado em até ~20s em vez de ficar pendurado
+ * esperando o fetch nativo resolver por conta própria.
  */
 export async function listPublicCategories(): Promise<PublicCategory[]> {
-  return (await fetchPublicCatalog<PublicCategory[]>("/public/categories")) ?? [];
+  try {
+    const result = await apiFetch<PublicCategory[]>("/public/categories", {
+      signal: AbortSignal.timeout(PUBLIC_CATALOG_TIMEOUT_MS),
+    });
+    return result ?? [];
+  } catch (err) {
+    console.error("[catalog-public] listPublicCategories failed, degrading to empty list:", err);
+    return [];
+  }
 }
 
 export interface ListPublicProductsParams {
@@ -131,8 +122,9 @@ const EMPTY_PRODUCTS_PAGE: Paginated<PublicProduct> = {
 /**
  * GET /public/products — ACTIVE products only, cursor-paginated, no auth.
  *
- * Empty responses are legitimate. Connectivity and gateway failures are not:
- * after one retry they are surfaced through the route error boundary.
+ * Same reasoning as `listPublicCategories` above: degrades to an empty page
+ * instead of throwing on a backend/gateway failure, so a cold catalog-service
+ * shows an empty section instead of taking down the whole storefront page.
  */
 export async function listPublicProducts(
   params: ListPublicProductsParams = {},
@@ -146,9 +138,16 @@ export async function listPublicProducts(
   if (params.sellerId) query.set("sellerId", params.sellerId);
   if (params.q) query.set("q", params.q);
   const qs = query.toString();
-  return (await fetchPublicCatalog<Paginated<PublicProduct>>(
-    `/public/products${qs ? `?${qs}` : ""}`,
-  )) ?? EMPTY_PRODUCTS_PAGE;
+  try {
+    const result = await apiFetch<Paginated<PublicProduct>>(
+      `/public/products${qs ? `?${qs}` : ""}`,
+      { signal: AbortSignal.timeout(PUBLIC_CATALOG_TIMEOUT_MS) },
+    );
+    return result ?? EMPTY_PRODUCTS_PAGE;
+  } catch (err) {
+    console.error("[catalog-public] listPublicProducts failed, degrading to empty page:", err);
+    return EMPTY_PRODUCTS_PAGE;
+  }
 }
 
 /**
@@ -157,15 +156,26 @@ export async function listPublicProducts(
  * DRAFT/INACTIVE product 404s here exactly like a nonexistent id — see
  * catalog-service's ProductsService.getPublishedById.
  *
- * Other failures retry once and then propagate. A temporarily unreachable
- * catalog must not be rendered as a false "product not found" response.
+ * Also returns null (instead of throwing) for any other failure — a
+ * network error or a 502/503/504 from a cold/unreachable catalog-service
+ * included. There's no product data to render either way, so the page
+ * falls back to `notFound()` rather than crashing the whole request with a
+ * 500. Known simplification: a shopper sees the same "product not found"
+ * page whether the product genuinely doesn't exist or the backend is
+ * temporarily down — good enough for now, logged below so the real cause
+ * stays visible in Vercel's function logs.
  */
 export async function getPublicProduct(id: string): Promise<PublicProduct | null> {
   try {
-    return await fetchPublicCatalog<PublicProduct>(`/public/products/${encodeURIComponent(id)}`);
-  } catch (error) {
-    if (error instanceof ApiError && (error.status === 404 || error.status === 400)) return null;
-    throw error;
+    return await apiFetch<PublicProduct>(`/public/products/${encodeURIComponent(id)}`, {
+      signal: AbortSignal.timeout(PUBLIC_CATALOG_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 404 && status !== 400) {
+      console.error(`[catalog-public] getPublicProduct(${id}) failed, degrading to not-found:`, err);
+    }
+    return null;
   }
 }
 
