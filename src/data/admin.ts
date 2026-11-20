@@ -25,10 +25,21 @@ export const ADMIN_NAV: AdminNavItem[] = [
     ],
   },
   { id: "pedidos", label: "Pedidos", href: "/admin/pedidos" },
+  { id: "entregas", label: "Entregas", href: "/admin/entregas" },
   { id: "relatorios", label: "Relatórios", href: "/admin/relatorios" },
-  { id: "financeiro", label: "Financeiro", href: "/admin/financeiro" },
+  {
+    id: "financeiro",
+    label: "Financeiro",
+    href: "/admin/financeiro",
+    children: [
+      { id: "fin-overview", label: "Visão geral", href: "/admin/financeiro" },
+      { id: "fin-integracoes", label: "Integrações", href: "/admin/financeiro/integracoes" },
+      { id: "fin-repasses", label: "Repasses", href: "/admin/financeiro/repasses" },
+    ],
+  },
   { id: "clientes", label: "Clientes", href: "/admin/clientes" },
   { id: "devolucoes", label: "Devoluções", href: "/admin/devolucoes" },
   { id: "conteudos", label: "Conteúdos / Cursos", href: "/admin/conteudos" },
   { id: "administradores", label: "Administradores", href: "/admin/administradores" },
+  { id: "configuracoes", label: "Configurações", href: "/admin/configuracoes" },
 ];

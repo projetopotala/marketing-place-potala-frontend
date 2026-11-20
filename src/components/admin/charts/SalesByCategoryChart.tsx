@@ -31,6 +31,7 @@ export function SalesByCategoryChart({ data }: SalesByCategoryChartProps) {
   }
 
   return (
+    <div className={styles.categoryChart}>
     <AdminChartContainer
       title="Vendas por categoria"
       description="Distribuição de receita por categoria de produto."
@@ -80,5 +81,6 @@ export function SalesByCategoryChart({ data }: SalesByCategoryChartProps) {
         </ul>
       </div>
     </AdminChartContainer>
+    </div>
   );
 }
