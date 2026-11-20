@@ -1700,3 +1700,63 @@ img {
   --potala-panel: #f1d188;
 }
 .potala-announcement { background-color: #d9a83c; }
+
+/* Tema areia das áreas pública, comprador e vendedor.
+   A presença destes elementos delimita o tema e preserva o admin e seus portais. */
+body:has(#topo, #seller-sidebar) {
+  --potala-navy-950: #e5b77f;
+  --potala-navy-900: #d5c897;
+  --potala-navy-850: #e9bd86;
+  --potala-navy-800: #f3e3c7;
+  --potala-navy-750: #fff5e3;
+  --potala-navy-700: #eebf8b;
+  --potala-bg: #d5c897;
+  --potala-bg-secondary: #e9bd86;
+  --potala-panel: #f3e3c7;
+  --potala-text-primary: #35332f;
+  --potala-text-secondary: #62513d;
+  --potala-text: #35332f;
+  --potala-text-muted: #62513d;
+  --potala-cream: #35332f;
+  --potala-gold: #72501d;
+  --potala-gold-light: #72501d;
+  --potala-button: #e9b94e;
+  --potala-button-light: #f3cf70;
+  --potala-border: rgb(114 80 29 / 28%);
+  --potala-border-strong: rgb(114 80 29 / 55%);
+  --shadow-panel: 0 8px 24px rgb(93 67 28 / 12%);
+  --primary: var(--potala-button);
+  --primary-foreground: #35332f;
+  --accent-foreground: #72501d;
+  --ring: #72501d;
+  background: var(--potala-bg);
+}
+
+body:has(#topo) #topo {
+  --potala-bg: #e9bd86;
+  --potala-bg-secondary: #e5b77f;
+  --potala-panel: #fff5e3;
+}
+
+body:has(#topo) .potala-announcement {
+  background-color: #e5b77f;
+}
+
+body:has(#topo) :is(.potala-btn-primary, .newsletter-section__submit) {
+  background: linear-gradient(180deg, var(--potala-button-light), var(--potala-button));
+  color: #35332f;
+  border-color: #a77a25;
+}
+
+body:has(#topo, #seller-sidebar) :focus-visible {
+  outline-color: #72501d;
+}
+
+@layer base {
+  body:has(#topo, #seller-sidebar) button,
+  body:has(#topo, #seller-sidebar) input::file-selector-button {
+    background: var(--potala-button);
+    color: #35332f;
+    border-color: #a77a25;
+  }
+}
