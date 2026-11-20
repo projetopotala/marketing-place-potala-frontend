@@ -3,10 +3,15 @@
 import { useEffect } from "react";
 
 /**
- * Safety net for the storefront route group. The public catalog retries a
- * transient gateway failure once and then lands here rather than claiming
- * that an unavailable backend is an empty catalog. Header and footer remain
- * usable, so shoppers can navigate or retry without a false empty state.
+ * Safety net for the storefront route group. Most of the "backend is
+ * cold/unreachable" cases are already handled upstream now (see
+ * lib/api/catalog-public.ts — listPublicCategories/listPublicProducts/
+ * getPublicProduct degrade to an empty result instead of throwing), so in
+ * practice a shopper should rarely hit this. This exists for whatever is
+ * left uncovered: header/footer (AnnouncementBar, MarketplaceHeader,
+ * MarketplaceFooter) still render from the layout above this boundary —
+ * only the page content is replaced — so navigation stays usable even when
+ * one page's data genuinely can't be recovered.
  */
 export default function StorefrontError({
   error,
