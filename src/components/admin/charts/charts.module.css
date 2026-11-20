@@ -175,4 +175,9 @@
     min-height: 220px;
     height: 240px;
   }
+
+  /* The category legend moves below the donut on phones, so it needs natural height. */
+  .categoryChart .containerCompact {
+    height: auto;
+  }
 }

@@ -1077,6 +1077,12 @@
     display: none;
   }
 
+  /* Dashboard tables stay available on small screens; their wide columns scroll locally. */
+  .tableScroll.dashboardTableScroll {
+    display: block;
+    overflow-x: auto;
+  }
+
   .mobileCards {
     display: flex;
   }
