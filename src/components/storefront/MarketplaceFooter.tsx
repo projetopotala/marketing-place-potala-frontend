@@ -7,6 +7,9 @@ import {
   SOCIAL_LINKS,
 } from "@/data/marketplace";
 import Link from "next/link";
+import { Suspense } from "react";
+import { formatBrazilWhatsapp } from "@/lib/api/settings";
+import { getStorefrontSettings } from "@/lib/storefront-settings";
 import { BrandLogo } from "@/components/storefront/BrandLogo";
 import { PaymentBrand } from "@/components/storefront/PaymentBrand";
 import {
@@ -26,9 +29,46 @@ const socialIcons = {
   pinterest: PinterestIcon,
 } as const;
 
-export function MarketplaceFooter() {
-  const phoneHref = `tel:${CONTACT_INFO.phone.replace(/\D/g, "")}`;
+interface FooterContact {
+  phoneLabel: string;
+  phoneHref: string;
+  email: string;
+}
 
+const DEFAULT_CONTACT: FooterContact = {
+  phoneLabel: CONTACT_INFO.phone,
+  phoneHref: `tel:${CONTACT_INFO.phone.replace(/\D/g, "")}`,
+  email: CONTACT_INFO.email,
+};
+
+/**
+ * Contato configurado em Admin → Configurações (catalog-service). Qualquer
+ * campo não configurado — ou a leitura indisponível — mantém o contato
+ * padrão de `data/marketplace.ts`.
+ */
+async function ConfiguredMarketplaceFooter() {
+  const settings = await getStorefrontSettings();
+  const whatsapp = settings?.supportWhatsapp;
+  return (
+    <MarketplaceFooterView
+      contact={{
+        phoneLabel: whatsapp ? formatBrazilWhatsapp(whatsapp) : DEFAULT_CONTACT.phoneLabel,
+        phoneHref: whatsapp ? `https://wa.me/${whatsapp}` : DEFAULT_CONTACT.phoneHref,
+        email: settings?.supportEmail ?? DEFAULT_CONTACT.email,
+      }}
+    />
+  );
+}
+
+export function MarketplaceFooter() {
+  return (
+    <Suspense fallback={<MarketplaceFooterView contact={DEFAULT_CONTACT} />}>
+      <ConfiguredMarketplaceFooter />
+    </Suspense>
+  );
+}
+
+function MarketplaceFooterView({ contact }: { contact: FooterContact }) {
   return (
     <footer id="contato" className="marketplace-footer">
       <div className="marketplace-footer__container">
@@ -85,13 +125,13 @@ export function MarketplaceFooter() {
               <span className="marketplace-footer__contact-icon" aria-hidden="true">
                 <WhatsAppIcon />
               </span>
-              <a href={phoneHref}>{CONTACT_INFO.phone}</a>
+              <a href={contact.phoneHref}>{contact.phoneLabel}</a>
             </li>
             <li>
               <span className="marketplace-footer__contact-icon" aria-hidden="true">
                 <MailIcon />
               </span>
-              <a href={`mailto:${CONTACT_INFO.email}`}>{CONTACT_INFO.email}</a>
+              <a href={`mailto:${contact.email}`}>{contact.email}</a>
             </li>
             <li>
               <span className="marketplace-footer__contact-icon" aria-hidden="true">
