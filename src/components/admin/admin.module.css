@@ -267,6 +267,10 @@
 }
 
 @media (max-width: 1023px) {
+  .chartsRow {
+    grid-template-columns: 1fr;
+  }
+
   .metricsGrid6 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1038,6 +1042,15 @@
 }
 
 @media (max-width: 640px) {
+  .tablesRow,
+  .bottomRow {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardTableScroll {
+    display: block;
+  }
+
   .metricsGrid {
     grid-template-columns: 1fr;
   }
