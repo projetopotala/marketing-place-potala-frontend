@@ -990,6 +990,11 @@
 }
 
 @media (max-width: 1023px) {
+  /* This block follows the desktop chart rules, so it wins over the 1439px layout. */
+  .chartsRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .shell {
     grid-template-columns: 1fr;
   }

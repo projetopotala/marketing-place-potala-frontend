@@ -17,6 +17,8 @@ import {
   Plug,
   HandCoins,
   LogOut,
+  RotateCcw,
+  UserRoundCog,
 } from "lucide-react";
 import { ADMIN_NAV, type AdminNavItem } from "@/data/admin";
 
@@ -61,6 +63,8 @@ const ICON_BY_ID: Record<string, LucideIcon> = {
   conteudos: BookOpen,
   relatorios: ChartNoAxesCombined,
   configuracoes: Settings,
+  devolucoes: RotateCcw,
+  administradores: UserRoundCog,
 };
 
 export const ADMIN_NAVIGATION: AdminNavigationItem[] = ADMIN_NAV.map(
