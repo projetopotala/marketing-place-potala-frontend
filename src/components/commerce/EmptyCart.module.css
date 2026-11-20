@@ -31,7 +31,7 @@
   margin-top: 0.35rem;
   padding: 0.7rem 1.2rem;
   border-radius: 0.375rem;
-  background: linear-gradient(180deg, var(--potala-gold-light), var(--potala-gold));
+  background: linear-gradient(180deg, var(--potala-button-light, var(--potala-gold-light)), var(--potala-button, var(--potala-gold)));
   color: var(--potala-text-primary);
   font-size: 0.9rem;
   font-weight: 600;

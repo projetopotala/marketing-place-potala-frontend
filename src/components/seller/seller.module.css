@@ -269,7 +269,7 @@
 
 .primaryBtn {
   border: 1px solid var(--seller-gold);
-  background: #d5a64f;
+  background: var(--potala-button, #d5a64f);
   color: var(--potala-text-primary);
 }
 
