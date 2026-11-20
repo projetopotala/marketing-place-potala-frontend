@@ -10,11 +10,10 @@ const VIEWPORTS = [
 ] as const;
 
 /**
- * Rotas reais do admin (ADMIN_NAV, src/data/admin.ts). Integrações,
- * Repasses, Relatórios, Configurações e Entregas saíram do menu e
- * respondem 404 de propósito (ligadas à decisão de gateway de pagamento
- * ainda em aberto — ver status-migracao-microservicos.md, "4 telas mock
- * do admin escondidas").
+ * Rotas reais do admin (ADMIN_NAV, src/data/admin.ts). Entregas é uma
+ * consulta paginada do fulfillment real; integrações, repasses e
+ * configurações continuam indisponíveis enquanto não houver contratos de
+ * backend, em vez de exibirem dados demonstrativos.
  */
 const ADMIN_ROUTES = [
   "/admin",
@@ -26,6 +25,7 @@ const ADMIN_ROUTES = [
   "/admin/financeiro",
   "/admin/clientes",
   "/admin/devolucoes",
+  "/admin/entregas",
   "/admin/conteudos",
   "/admin/administradores",
 ] as const;
@@ -315,6 +315,20 @@ test.describe("admin rotas e modal", () => {
       await expect(page.locator("body")).toBeVisible();
       await expect(page).toHaveURL(new RegExp(route.replace(/\//g, "\\/")));
     }
+  });
+
+  test("Entregas consulta dados reais sem oferecer mutações administrativas", async ({ page, context }) => {
+    await loginAs(context, "admin");
+    await page.goto("/admin/entregas");
+    await expect(page.getByRole("heading", { name: "Entregas" })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole("textbox", { name: "Buscar entregas nesta página" })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole("combobox", { name: "Filtrar entregas por status" })).toBeVisible();
+    await expect(page.getByText(/alteração administrativa de status não são expostos/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /marcar como (enviado|entregue)|iniciar preparo/i })).toHaveCount(0);
   });
 
   /**
