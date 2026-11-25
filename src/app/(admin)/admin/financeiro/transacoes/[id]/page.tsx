@@ -1,4 +1,4 @@
-import { TransactionDetailView } from "@/components/admin/modules/TransactionDetailView";
+import { ConnectedDetailView } from "@/components/admin/modules/ConnectedDetailView";
 
 export default async function AdminTransactionDetailPage({
   params,
@@ -6,5 +6,5 @@ export default async function AdminTransactionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <TransactionDetailView id={id} />;
+  return <ConnectedDetailView key={id} id={id} resource="financeiro" />;
 }

@@ -4,9 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Menu, Search, LogOut, UserRound } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { useAdminData } from "@/features/admin/hooks/useAdminData";
-import { globalSearch } from "@/features/admin/selectors/dashboardSelectors";
-import { ADMIN_ICON_STROKE } from "@/components/admin/adminNav";
+import { ADMIN_ICON_STROKE, ADMIN_NAVIGATION } from "@/components/admin/adminNav";
 import {
   Command,
   CommandDialog,
@@ -25,11 +23,7 @@ interface AdminTopbarProps {
 }
 
 const SEARCH_GROUPS = [
-  { key: "sellers" as const, heading: "Vendedores" },
-  { key: "products" as const, heading: "Produtos" },
-  { key: "orders" as const, heading: "Pedidos" },
-  { key: "customers" as const, heading: "Clientes" },
-  { key: "contents" as const, heading: "Conteúdos" },
+  { key: "pages" as const, heading: "Seções administrativas" },
 ];
 
 export function AdminTopbar({
@@ -39,12 +33,11 @@ export function AdminTopbar({
 }: AdminTopbarProps) {
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { db } = useAdminData();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
 
-  const grouped = useMemo(() => globalSearch(db, query), [db, query]);
+  const grouped = useMemo(() => ({ pages: ADMIN_NAVIGATION.flatMap(item => [item, ...(item.children ?? [])]).filter((item, index, all) => all.findIndex(other => other.href === item.href) === index && item.label.toLocaleLowerCase("pt-BR").includes(query.trim().toLocaleLowerCase("pt-BR"))).map(item => ({ ...item, meta: "Abrir seção" })) }), [query]);
   const hasQuery = query.trim().length > 0;
 
   useEffect(() => {
@@ -116,7 +109,7 @@ export function AdminTopbar({
             }}
           >
             <span className={styles.searchTriggerText}>
-              Buscar vendedores, produtos, pedidos, clientes...
+              Buscar seções do painel...
             </span>
           </button>
           <kbd className={styles.kbd}>Ctrl + K</kbd>
@@ -141,7 +134,7 @@ export function AdminTopbar({
         open={open}
         onOpenChange={handleOpenChange}
         title="Busca administrativa"
-        description="Busque vendedores, produtos, pedidos, clientes e conteúdos."
+        description="Encontre uma seção. Consulte registros reais na busca de cada listagem."
         className={styles.commandDialog}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -152,14 +145,14 @@ export function AdminTopbar({
           <CommandInput
             value={query}
             onValueChange={setQuery}
-            placeholder="Buscar vendedores, produtos, pedidos, clientes..."
+            placeholder="Buscar seções do painel..."
             aria-label="Termo da busca administrativa"
           />
           <CommandList className={styles.commandList}>
             <CommandEmpty className={styles.searchEmpty}>
               {hasQuery
                 ? `Nenhum resultado encontrado para “${query.trim()}”.`
-                : "Digite para buscar vendedores, produtos, pedidos, clientes e conteúdos."}
+                : "Digite o nome da seção que deseja abrir."}
             </CommandEmpty>
 
             {hasQuery

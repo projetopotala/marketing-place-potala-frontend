@@ -145,7 +145,7 @@ export function SellersView() {
     <div className={sharedStyles.stack}>
       <AdminPageHeader
         title="Vendedores"
-        description="Aprove, rejeite ou suspenda lojas, direto do sellers-service."
+        description="Gerencie vendedores, aprovações e comissões do marketplace."
       />
 
       {isLoading ? (
@@ -158,6 +158,7 @@ export function SellersView() {
         <AdminDataTable
           caption="Lista de vendedores"
           rows={sellers ?? []}
+          tools={{ describe: row => ({ Loja: row.tradeName, "Razão social": row.legalName, Status: ADMIN_SELLER_STATUS_LABEL[row.status], Email: row.email, Documento: `${row.documentType} ${row.documentNumber}`, Comissão: formatCommission(row.commissionBps), Cadastro: formatDate(row.createdAt), Motivo: row.statusReason ?? "—" }) }}
           columns={[
             {
               key: "tradeName",

@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+
+const source = fs.readFileSync('src/features/admin/selectors/apiOverview.ts', 'utf8');
+const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } });
+const { buildApiOverview } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const row = (id, extra = {}) => ({ id, orderId: 'order-1', sellerId: id, status: 'CONFIRMED', subtotalCents: 1000, commissionCents: 100, sellerNetCents: 900, createdAt: '2026-11-20T12:00:00Z', order: { status: 'PAID', orderNumber: 'P-1', createdAt: '2026-11-20T12:00:00Z' }, items: [{ productId: 'p1', productTitle: 'Produto real', quantity: 1, lineTotalCents: 1000 }], ...extra });
+const result = buildApiOverview([row('s1'), row('s2', { financialSnapshot: { version: 1 } })], [], [], 7, new Date('2026-11-20T15:00:00Z'));
+assert.equal(result.orderCount, 1, 'um pedido dividido por loja conta uma vez');
+assert.equal(result.paidCents, 2000, 'somar subtotais de cada loja, nunca o total pai');
+assert.equal(result.commissionCents, null, 'snapshot ausente não pode ser tratado como zero');
+assert.equal(result.sales.reduce((sum, point) => sum + point.orders, 0), 1);
+assert.equal(result.categories[0].label, 'Categoria não informada');
+assert.equal(result.topProducts[0].quantity, 2);
+const cancelled = buildApiOverview([row('s1', { order: { status: 'CANCELLED' } })], [], [], 7, new Date('2026-11-20T15:00:00Z'));
+assert.equal(cancelled.paidCents, 0);
+assert.equal(cancelled.topProducts.length, 0);
+const empty = buildApiOverview([], [], [], 7, new Date('2026-11-20T15:00:00Z'));
+assert.equal(empty.orderCount, 0);
+assert.equal(empty.sales.length, 7);
+assert.equal(empty.commissionCents, 0);
+console.log('admin overview: split orders, missing snapshots, categories, cancelled and empty data OK');

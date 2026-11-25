@@ -60,7 +60,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
-export function OrdersView() {
+export function OrdersView({ deliveries = false }: { deliveries?: boolean }) {
   const [sellers, setSellers] = useState<AdminSeller[] | null>(null);
   const [orders, setOrders] = useState<AdminSellerOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,8 +130,8 @@ export function OrdersView() {
   return (
     <div className={sharedStyles.stack}>
       <AdminPageHeader
-        title="Pedidos"
-        description="Pedidos de todas as lojas, direto do orders-service."
+        title={deliveries ? "Entregas" : "Pedidos"}
+        description={deliveries ? "Acompanhe a preparação e entrega dos pedidos. Atualizações são realizadas pela loja responsável; rastreamento por transportadora indisponível." : "Acompanhe os pedidos e a operação de todas as lojas."}
       />
 
       {isLoading ? (
@@ -142,6 +142,7 @@ export function OrdersView() {
         <AdminDataTable
           caption="Pedidos de todas as lojas"
           rows={orders ?? []}
+          tools={{ describe: row => ({ Pedido: row.order.orderNumber, Loja: sellerName(row.sellerId), Status: SELLER_ORDER_STATUS_LABEL[row.status], Bruto: formatMoney(row.subtotalCents), Data: formatDate(row.createdAt), Destinatário: row.order.shippingAddress?.recipient ?? "—", Cidade: row.order.shippingAddress ? `${row.order.shippingAddress.city}/${row.order.shippingAddress.state}` : "—", Itens: (row.items ?? []).map(item => `${item.productTitle} (${item.quantity})`).join(", ") }) }}
           columns={[
             { key: "code", header: "Pedido", render: (row) => row.order.orderNumber },
             { key: "seller", header: "Loja", render: (row) => sellerName(row.sellerId) },

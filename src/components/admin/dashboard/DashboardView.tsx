@@ -1,142 +1,86 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChartNoAxesCombined, Package, ShoppingBag, Store, Truck, WalletCards } from "lucide-react";
-import { ADMIN_SELLER_STATUS_LABEL, listAdminOrders, listAdminSellers, type AdminSeller, type AdminSellerOrder } from "@/lib/api/admin";
-import { listPublicProducts, type PublicProduct } from "@/lib/api/catalog-public";
-import { ApiError } from "@/lib/api/client";
-import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/api/orders";
+import { listAdminSellers, listAdminProducts, listAdminOrders, listAdminCategories, ADMIN_SELLER_STATUS_LABEL, type AdminSeller, type AdminProduct, type AdminSellerOrder, type AdminCategory } from "@/lib/api/admin";
+import { SELLER_ORDER_STATUS_LABEL } from "@/lib/api/orders";
+import { buildApiOverview } from "@/features/admin/selectors/apiOverview";
+import { formatMoney } from "@/features/admin/utils/currency";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
 import { AdminMetricCard } from "@/components/admin/shared/AdminMetricCard";
-import { AdminEmptyState, AdminStatusBadge } from "@/components/admin/shared/AdminStatusBadge";
+import { AdminStatusBadge, AdminEmptyState } from "@/components/admin/shared/AdminStatusBadge";
 import { sharedStyles } from "@/components/admin/shared/AdminDataTable";
-import { MarketplaceGrowthChart } from "@/components/admin/charts/MarketplaceGrowthChart";
-import { SalesByCategoryChart } from "@/components/admin/charts/SalesByCategoryChart";
 import { SalesPerformanceChart } from "@/components/admin/charts/SalesPerformanceChart";
+import { SalesByCategoryChart } from "@/components/admin/charts/SalesByCategoryChart";
+import { MarketplaceGrowthChart } from "@/components/admin/charts/MarketplaceGrowthChart";
 import { FadeIn } from "@/components/ui/motion/FadeIn";
 import { StaggerContainer, StaggerItem } from "@/components/ui/motion/StaggerContainer";
-import adminStyles from "@/components/admin/admin.module.css";
+import styles from "@/components/admin/admin.module.css";
 
 const LIMIT = 100;
-const PAID: OrderStatus[] = ["PAID", "FULFILLING", "COMPLETED"];
-type Data = { sellers: AdminSeller[]; products: PublicProduct[]; orders: AdminSellerOrder[]; more: { sellers: boolean; products: boolean; orders: boolean } };
-
-const icons = { sellers: Store, products: Package, today: ShoppingBag, month: ChartNoAxesCombined, revenue: WalletCards, delivery: Truck };
-const money = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const date = (value: string) => new Date(value).toLocaleDateString("pt-BR");
-const paid = (order: AdminSellerOrder) => PAID.includes(order.order.status);
-const sellerTone = (status: AdminSeller["status"]) => status === "ACTIVE" ? "success" as const : status === "PENDING" ? "warning" as const : status === "SUSPENDED" ? "danger" as const : "muted" as const;
-const orderTone = (status: OrderStatus) => status === "PAID" || status === "COMPLETED" ? "success" as const : status === "FULFILLING" ? "info" as const : status === "PENDING_PAYMENT" ? "warning" as const : "danger" as const;
-
-function sameDay(value: string, now: Date) {
-  const valueDate = new Date(value);
-  return valueDate.getFullYear() === now.getFullYear() && valueDate.getMonth() === now.getMonth() && valueDate.getDate() === now.getDate();
+function Panel({ title, href, children }: { title: string; href?: string; children: ReactNode }) {
+  return <div className={styles.panel}><div className={styles.panelHead}><h2 className={styles.panelTitle}>{title}</h2>{href && <Link href={href} className={sharedStyles.linkBtn}>Ver todos</Link>}</div>{children}</div>;
 }
 
-function salesSeries(orders: AdminSellerOrder[], days: number) {
-  const first = new Date();
-  first.setHours(0, 0, 0, 0);
-  first.setDate(first.getDate() - days + 1);
-  const points = new Map<string, { label: string; revenueCents: number; orders: number }>();
-  for (let offset = 0; offset < days; offset += 1) {
-    const point = new Date(first);
-    point.setDate(first.getDate() + offset);
-    points.set(point.toISOString().slice(0, 10), { label: point.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }), revenueCents: 0, orders: 0 });
-  }
-  for (const order of orders) {
-    const bucket = points.get(new Date(order.createdAt).toISOString().slice(0, 10));
-    if (!bucket) continue;
-    bucket.orders += 1;
-    if (paid(order)) bucket.revenueCents += order.subtotalCents;
-  }
-  return [...points.values()];
-}
-
-/** Composição clássica com fontes reais existentes; sem seeds históricos. */
 export function DashboardView() {
-  const [data, setData] = useState<Data | null>(null);
-  const [days, setDays] = useState(30);
-  const [error, setError] = useState<string | null>(null);
+  const [sellers, setSellers] = useState<AdminSeller[] | null>(null);
+  const [products, setProducts] = useState<AdminProduct[] | null>(null);
+  const [orders, setOrders] = useState<AdminSellerOrder[] | null>(null);
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [partial, setPartial] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
-    try {
-      const [sellerPage, productPage, orderPage] = await Promise.all([
-        listAdminSellers({ limit: LIMIT }), listPublicProducts({ limit: LIMIT }), listAdminOrders({ limit: LIMIT }),
-      ]);
-      setData({ sellers: sellerPage.items, products: productPage.items, orders: orderPage.items, more: { sellers: sellerPage.pageInfo.hasNextPage, products: productPage.pageInfo.hasNextPage, orders: orderPage.pageInfo.hasNextPage } });
-    } catch (cause) {
-      setData(null);
-      setError(cause instanceof ApiError ? cause.message : "Não foi possível carregar os dados do dashboard.");
-    } finally { setLoading(false); }
-  }, []);
+  const [revision, setRevision] = useState(0);
+  const [days, setDays] = useState(30);
 
   useEffect(() => {
-    const loadTimer = window.setTimeout(() => { void load(); }, 0);
-    return () => window.clearTimeout(loadTimer);
-  }, [load]);
+    let cancelled = false;
+    Promise.allSettled([listAdminSellers({ limit: LIMIT }), listAdminProducts({ limit: LIMIT }), listAdminOrders({ limit: LIMIT }), listAdminCategories()]).then(([s, p, o, c]) => {
+      if (cancelled) return;
+      setSellers(s.status === "fulfilled" ? s.value.items : null);
+      setProducts(p.status === "fulfilled" ? p.value.items : null);
+      setOrders(o.status === "fulfilled" ? o.value.items : null);
+      setCategories(c.status === "fulfilled" ? c.value : []);
+      setErrors([s, p, o, c].flatMap((result, index) => result.status === "rejected" ? [`Não foi possível carregar ${["vendedores", "produtos", "pedidos", "categorias"][index]}.`] : []));
+      setPartial([s, p, o].some(result => result.status === "fulfilled" && result.value.pageInfo.hasNextPage));
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [revision]);
 
-  const view = useMemo(() => {
-    if (!data) return null;
-    const now = new Date();
-    const active = data.sellers.filter((seller) => seller.status === "ACTIVE");
-    const pendingSellers = data.sellers.filter((seller) => seller.status === "PENDING");
-    const suspended = data.sellers.filter((seller) => seller.status === "SUSPENDED");
-    const paidOrders = data.orders.filter(paid);
-    const pendingOrders = data.orders.filter((order) => order.order.status === "PENDING_PAYMENT");
-    const monthly = paidOrders.filter((order) => new Date(order.createdAt).getFullYear() === now.getFullYear() && new Date(order.createdAt).getMonth() === now.getMonth());
-    const productById = new Map(data.products.map((product) => [product.id, product]));
-    const sellerById = new Map(data.sellers.map((seller) => [seller.id, seller]));
-    const sellerStats = new Map(data.sellers.map((seller) => [seller.id, { products: 0, orders: 0 }]));
-    for (const product of data.products) { const stats = sellerStats.get(product.sellerId) ?? { products: 0, orders: 0 }; stats.products += 1; sellerStats.set(product.sellerId, stats); }
-    for (const order of data.orders) { const stats = sellerStats.get(order.sellerId) ?? { products: 0, orders: 0 }; stats.orders += 1; sellerStats.set(order.sellerId, stats); }
-    const categories = new Map<string, number>();
-    const top = new Map<string, { title: string; quantity: number; cents: number }>();
-    for (const order of paidOrders) for (const item of order.items) {
-      const category = productById.get(item.productId)?.category.name ?? "Sem categoria disponível";
-      categories.set(category, (categories.get(category) ?? 0) + item.lineTotalCents);
-      const product = top.get(item.productId) ?? { title: item.productTitle, quantity: 0, cents: 0 };
-      product.quantity += item.quantity; product.cents += item.lineTotalCents; top.set(item.productId, product);
-    }
-    return { active, pendingSellers, suspended, paidOrders, pendingOrders, monthly, sellerById, sellerStats, series: salesSeries(data.orders, days), categorySeries: [...categories.entries()].map(([label, value]) => ({ id: label, label, value })).sort((a, b) => b.value - a.value).slice(0, 6), top: [...top.values()].sort((a, b) => b.cents - a.cents).slice(0, 5), recentSellers: [...data.sellers].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 6), recentOrders: [...data.orders].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 6) };
-  }, [data, days]);
-
-  if (loading && !data) return <div className={sharedStyles.skeleton} aria-busy="true" />;
-  if (!data || !view) return <AdminEmptyState title="Não foi possível carregar o dashboard" description={error ?? "Tente novamente."} />;
-
-  const now = new Date();
-  const revenue = view.paidOrders.reduce((sum, order) => sum + order.subtotalCents, 0);
-  const today = data.orders.filter((order) => sameDay(order.createdAt, now)).length;
-  const running = data.orders.filter((order) => order.order.status === "FULFILLING").length;
-  const cards = [
-    { id: "sellers", label: "Vendedores ativos", value: `${view.active.length}${data.more.sellers ? "+" : ""}`, hint: "Na página atual de vendedores" },
-    { id: "products", label: "Produtos ativos", value: `${data.products.length}${data.more.products ? "+" : ""}`, hint: "Na página atual da vitrine" },
-    { id: "today", label: "Pedidos hoje", value: String(today), hint: "Na amostra de pedidos" },
-    { id: "month", label: "Vendas do mês", value: money(view.monthly.reduce((sum, order) => sum + order.subtotalCents, 0)), hint: "Bruto aprovado na amostra" },
-    { id: "revenue", label: "Receita aprovada", value: money(revenue), hint: `Amostra: até ${data.orders.length}${data.more.orders ? "+" : ""} linhas recentes` },
-    { id: "delivery", label: "Entregas em andamento", value: String(running), hint: "Na amostra de pedidos" },
+  const data = useMemo(() => buildApiOverview(orders ?? [], products ?? [], categories, days), [orders, products, categories, days]);
+  const money = (value: number | null) => orders && value != null ? formatMoney(value) : "—";
+  const metrics = [
+    { label: "Vendedores", value: sellers ? String(sellers.length) : "—", hint: "No recorte carregado", icon: Store },
+    { label: "Produtos ativos", value: products ? String(products.filter(product => product.status === "ACTIVE").length) : "—", hint: "No recorte carregado", icon: Package },
+    { label: "Pedidos hoje", value: orders ? String(data.todayCount) : "—", hint: "Pedidos únicos no recorte", icon: ShoppingBag },
+    { label: "Vendas no período", value: money(data.paidCents), hint: "Bruto pago antes de descontos", icon: ChartNoAxesCombined },
+    { label: "Comissões previstas", value: money(data.commissionCents), hint: "Somente com registro financeiro", icon: WalletCards },
+    { label: "Entregas em andamento", value: orders ? String(data.shipments) : "—", hint: "Remessas no período", icon: Truck },
   ];
+  const unavailable = <AdminEmptyState title="Dados indisponíveis" description="Tente carregar novamente." />;
+  if (loading) return <div className={sharedStyles.skeleton} aria-busy="true" />;
 
   return <div className={sharedStyles.stack}>
-    <FadeIn><AdminPageHeader title="Painel do Marketplace" description="Visão consolidada de vendedores, produtos e pedidos recentes." icon={<ChartNoAxesCombined size={18} strokeWidth={1.75} aria-hidden="true" />} /></FadeIn>
-    {error ? <AdminEmptyState title="Dados parcialmente indisponíveis" description={error} /> : null}
-    <StaggerContainer className={sharedStyles.metrics}>{cards.map((card) => <StaggerItem key={card.id}><AdminMetricCard {...card} icon={icons[card.id as keyof typeof icons]} /></StaggerItem>)}</StaggerContainer>
-    <section className={adminStyles.chartsRow} aria-label="Gráficos do dashboard">
-      <div className={adminStyles.panel}><div className={adminStyles.panelHead}><h2 className={adminStyles.panelTitle}>Desempenho de vendas</h2><select className={adminStyles.select} value={days} onChange={(event) => setDays(Number(event.target.value))} aria-label="Período do gráfico"><option value={7}>Últimos 7 dias</option><option value={30}>Últimos 30 dias</option><option value={90}>Últimos 90 dias</option></select></div>{view.series.some((point) => point.orders > 0) ? <SalesPerformanceChart data={view.series} /> : <AdminEmptyState title="Sem pedidos no período" />}</div>
-      <div className={adminStyles.panel}><div className={adminStyles.panelHead}><h2 className={adminStyles.panelTitle}>Vendas por categoria</h2></div><SalesByCategoryChart data={view.categorySeries} /></div>
-      <div className={adminStyles.panel}><div className={adminStyles.panelHead}><h2 className={adminStyles.panelTitle}>Crescimento do marketplace</h2></div>{view.series.some((point) => point.orders > 0) ? <MarketplaceGrowthChart data={view.series} /> : <AdminEmptyState title="Sem pedidos no período" />}</div>
+    <FadeIn><AdminPageHeader title="Painel do Marketplace" description="Visão geral e controle completo do marketplace" icon={<ChartNoAxesCombined size={18} />} actions={<button className={sharedStyles.btnSecondary} onClick={() => { setLoading(true); setRevision(value => value + 1); }}>Atualizar</button>} /></FadeIn>
+    <p className={sharedStyles.subtitle}>Indicadores sobre até {LIMIT} registros recentes de cada lista. {partial ? "Há mais registros fora deste recorte. " : ""}Vendas e gráficos: últimos {days} dias; valores brutos antes de descontos.</p>
+    {errors.length > 0 && <p role="alert">{errors.join(" ")}</p>}
+    <StaggerContainer className={sharedStyles.metrics}>{metrics.map(metric => <StaggerItem key={metric.label}><AdminMetricCard {...metric} /></StaggerItem>)}</StaggerContainer>
+    <section className={styles.chartsRow} aria-label="Gráficos">
+      <div className={styles.panel}><div className={styles.panelHead}><h2 className={styles.panelTitle}>Desempenho de Vendas</h2><select className={styles.select} aria-label="Período do gráfico" value={days} onChange={event => setDays(Number(event.target.value))}>{[7, 30, 90].map(value => <option key={value} value={value}>Últimos {value} dias</option>)}</select></div>{orders ? <SalesPerformanceChart data={data.sales} /> : unavailable}</div>
+      <Panel title="Vendas por Categoria">{orders ? <SalesByCategoryChart data={data.categories} /> : unavailable}</Panel>
+      <Panel title="Crescimento do marketplace">{orders ? <MarketplaceGrowthChart data={data.sales} /> : unavailable}</Panel>
     </section>
-    <section className={adminStyles.tablesRow} aria-label="Tabelas operacionais">
-      <article className={adminStyles.panel}><div className={adminStyles.panelHead}><h2 className={adminStyles.panelTitle}>Vendedores em destaque</h2><Link href="/admin/vendedores" className={sharedStyles.linkBtn}>Ver todos</Link></div><div className={`${adminStyles.tableScroll} ${adminStyles.dashboardTableScroll}`}>{view.recentSellers.length === 0 ? <AdminEmptyState title="Nenhum vendedor cadastrado" /> : <table className={adminStyles.table}><thead><tr><th>Loja</th><th>Status</th><th>Produtos*</th><th>Pedidos*</th><th>Comissão</th></tr></thead><tbody>{view.recentSellers.map((seller) => { const stats = view.sellerStats.get(seller.id) ?? { products: 0, orders: 0 }; return <tr key={seller.id}><td>{seller.tradeName}</td><td><AdminStatusBadge label={ADMIN_SELLER_STATUS_LABEL[seller.status]} tone={sellerTone(seller.status)} /></td><td>{stats.products}</td><td>{stats.orders}</td><td>{seller.commissionBps == null ? "—" : `${seller.commissionBps / 100}%`}</td></tr>; })}</tbody></table>}</div><p className={adminStyles.alertDetail}>*Contagens na página atual de dados.</p></article>
-      <article className={adminStyles.panel}><div className={adminStyles.panelHead}><h2 className={adminStyles.panelTitle}>Pedidos recentes</h2><Link href="/admin/pedidos" className={sharedStyles.linkBtn}>Ver todos</Link></div><div className={`${adminStyles.tableScroll} ${adminStyles.dashboardTableScroll}`}>{view.recentOrders.length === 0 ? <AdminEmptyState title="Nenhum pedido recente" /> : <table className={adminStyles.table}><thead><tr><th>Pedido</th><th>Loja</th><th>Valor</th><th>Status</th></tr></thead><tbody>{view.recentOrders.map((order) => <tr key={order.id}><td>{order.order.orderNumber}</td><td>{view.sellerById.get(order.sellerId)?.tradeName ?? "Loja indisponível"}</td><td>{money(order.subtotalCents)}</td><td><AdminStatusBadge label={ORDER_STATUS_LABEL[order.order.status]} tone={orderTone(order.order.status)} /></td></tr>)}</tbody></table>}</div></article>
+    <section className={styles.tablesRow}>
+      <Panel title="Vendedores em destaque" href="/admin/vendedores">{sellers ? <div className={`${styles.tableScroll} ${styles.dashboardTableScroll}`}><table className={styles.table}><thead><tr><th>Loja</th><th>Status</th><th>Produtos</th><th>Comissão</th></tr></thead><tbody>{[...sellers].sort((a, b) => (data.sellerTotals.find(row => row.id === b.id)?.value ?? 0) - (data.sellerTotals.find(row => row.id === a.id)?.value ?? 0)).slice(0, 5).map(seller => <tr key={seller.id}><td>{seller.tradeName}</td><td><AdminStatusBadge label={ADMIN_SELLER_STATUS_LABEL[seller.status]} tone={seller.status === "ACTIVE" ? "success" : "warning"} /></td><td>{products ? products.filter(product => product.sellerId === seller.id).length : "—"}</td><td>{seller.commissionBps == null ? "—" : `${seller.commissionBps / 100}%`}</td></tr>)}</tbody></table>{sellers.length === 0 && <AdminEmptyState title="Nenhum vendedor cadastrado" />}</div> : unavailable}</Panel>
+      <Panel title="Pedidos recentes" href="/admin/pedidos">{orders ? <div className={`${styles.tableScroll} ${styles.dashboardTableScroll}`}><table className={styles.table}><thead><tr><th>Pedido</th><th>Loja</th><th>Valor bruto</th><th>Status</th></tr></thead><tbody>{data.recent.map(row => <tr key={row.id}><td>{row.order.orderNumber}</td><td>{sellers?.find(seller => seller.id === row.sellerId)?.tradeName ?? row.sellerId}</td><td>{formatMoney(row.subtotalCents)}</td><td><AdminStatusBadge label={SELLER_ORDER_STATUS_LABEL[row.status]} tone="info" /></td></tr>)}</tbody></table>{data.recent.length === 0 && <AdminEmptyState title="Nenhum pedido no período" />}</div> : unavailable}</Panel>
     </section>
-    <section className={adminStyles.bottomRow} aria-label="Resumo e pendências">
-      <article className={adminStyles.panel}><h2 className={adminStyles.panelTitle}>Resumo financeiro</h2><p className={adminStyles.alertDetail}>Valores da amostra atual de pedidos administrativos.</p><div className={adminStyles.financeList}><div className={adminStyles.financeRow}><span className={adminStyles.financeLabel}>Bruto aprovado</span><strong className={adminStyles.financeValue}>{money(revenue)}</strong></div><div className={adminStyles.financeRow}><span className={adminStyles.financeLabel}>Aguardando pagamento</span><strong className={adminStyles.financeValue}>{money(view.pendingOrders.reduce((sum, order) => sum + order.subtotalCents, 0))}</strong></div><div className={adminStyles.financeRow}><span className={adminStyles.financeLabel}>Pedidos aprovados</span><strong className={adminStyles.financeValue}>{view.paidOrders.length}</strong></div></div><Link href="/admin/financeiro" className={sharedStyles.linkBtn}>Ver financeiro</Link></article>
-      <article className={adminStyles.panel}><h2 className={adminStyles.panelTitle}>Alertas</h2><div className={adminStyles.alertList}><div className={adminStyles.alertItem}><h3 className={adminStyles.alertTitle}>{view.pendingSellers.length} vendedores pendentes</h3><p className={adminStyles.alertDetail}>Cadastros aguardando revisão.</p></div><div className={adminStyles.alertItem}><h3 className={adminStyles.alertTitle}>{view.pendingOrders.length} pagamentos pendentes</h3><p className={adminStyles.alertDetail}>Linhas de pedido aguardando pagamento.</p></div><div className={adminStyles.alertItem}><h3 className={adminStyles.alertTitle}>{view.suspended.length} vendedores suspensos</h3><p className={adminStyles.alertDetail}>Requerem acompanhamento administrativo.</p></div></div></article>
-      <article className={adminStyles.panel}><h2 className={adminStyles.panelTitle}>Aprovações pendentes</h2><div className={adminStyles.approvalList}>{view.pendingSellers.length === 0 ? <AdminEmptyState title="Nenhuma aprovação pendente" /> : view.pendingSellers.slice(0, 4).map((seller) => <div key={seller.id} className={adminStyles.approvalItem}><h3 className={adminStyles.approvalTitle}>{seller.tradeName}</h3><p className={adminStyles.approvalDesc}>{seller.email} · {date(seller.createdAt)}</p></div>)}</div><Link href="/admin/vendedores" className={sharedStyles.linkBtn}>Revisar vendedores</Link></article>
-      <article className={adminStyles.panel}><h2 className={adminStyles.panelTitle}>Top produtos</h2><div className={adminStyles.financeList}>{view.top.length === 0 ? <AdminEmptyState title="Sem vendas aprovadas" /> : view.top.map((product) => <div key={product.title} className={adminStyles.financeRow}><span className={adminStyles.financeLabel}>{product.title} · {product.quantity} un.</span><strong className={adminStyles.financeValue}>{money(product.cents)}</strong></div>)}</div></article>
+    <section className={styles.bottomRow}>
+      <Panel title="Resumo financeiro" href="/admin/financeiro"><div className={styles.financeList}>{[{ label: "Bruto pago", value: data.paidCents }, { label: "Aguardando pagamento", value: data.pendingCents }, { label: "Comissões previstas", value: data.commissionCents }, { label: "Líquido previsto", value: data.netCents }].map(row => <div className={styles.financeRow} key={row.label}><span className={styles.financeLabel}>{row.label}</span><span className={styles.financeValue}>{money(row.value)}</span></div>)}</div><p className={sharedStyles.subtitle}>Valores previstos não comprovam repasse.</p></Panel>
+      <Panel title="Alertas"><div className={styles.alertList}><article className={styles.alertItem}><h3 className={styles.alertTitle}>Estoque baixo</h3><p className={styles.alertDetail}>{products ? `${products.filter(product => product.variants.reduce((sum, variant) => sum + variant.inventory.quantity, 0) < 5).length} produtos com menos de 5 unidades no recorte.` : "Estoque indisponível."}</p></article><article className={styles.alertItem}><h3 className={styles.alertTitle}>Integrações de pagamento</h3><p className={styles.alertDetail}>Gateway indisponível. Repasses e estornos não são executados pelo painel.</p></article></div></Panel>
+      <Panel title="Aprovações pendentes"><div className={styles.approvalList}>{[{ label: "Vendedores", count: sellers ? sellers.filter(row => row.status === "PENDING").length : "—", href: "/admin/vendedores" }, { label: "Produtos em revisão", count: products ? products.filter(row => row.status === "REVIEW").length : "—", href: "/admin/produtos" }].map(item => <article className={styles.approvalItem} key={item.href}><h3 className={styles.approvalTitle}><Link className={sharedStyles.linkBtn} href={item.href}>{item.label}</Link><span className={styles.approvalCount}>{item.count}</span></h3><p className={styles.approvalDesc}>No recorte carregado</p></article>)}</div></Panel>
+      <Panel title="Top produtos">{orders ? <div className={styles.financeList}>{data.topProducts.map(product => <div className={styles.financeRow} key={product.id}><span className={styles.financeLabel}>{product.title} · {product.quantity} un.</span><span className={styles.financeValue}>{formatMoney(product.revenueCents)}</span></div>)}{data.topProducts.length === 0 && <AdminEmptyState title="Sem vendas no período" />}</div> : unavailable}</Panel>
     </section>
   </div>;
 }

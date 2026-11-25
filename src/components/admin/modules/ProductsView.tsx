@@ -144,7 +144,7 @@ export function ProductsView() {
     <div className={sharedStyles.stack}>
       <AdminPageHeader
         title="Produtos"
-        description="Todos os produtos de todas as lojas, direto do catalog-service."
+        description="Catálogo completo, estoque e disponibilidade das lojas."
       />
 
       {isLoading ? (
@@ -155,6 +155,7 @@ export function ProductsView() {
         <AdminDataTable
           caption="Lista de produtos"
           rows={products ?? []}
+          tools={{ describe: row => ({ Produto: row.title, Vendedor: sellerName(row.sellerId), Status: ADMIN_PRODUCT_STATUS_LABEL[row.status], Preço: formatMoney(row.priceCents), Estoque: totalAdminProductStock(row), Descrição: row.description, Destaque: row.featured ? "Sim" : "Não" }) }}
           columns={[
             { key: "title", header: "Produto", render: (row) => row.title },
             { key: "seller", header: "Vendedor", render: (row) => sellerName(row.sellerId) },

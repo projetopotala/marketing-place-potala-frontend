@@ -294,6 +294,7 @@ export function CouponsView() {
         <AdminDataTable
           caption="Cupons"
           rows={coupons ?? []}
+          tools={{ describe: row => ({ Código: row.code, Nome: row.name, Status: COUPON_STATUS_LABEL[row.status], Desconto: formatDiscount(row), Início: formatDate(row.startsAt), Fim: formatDate(row.endsAt), Usos: row.usageCount }) }}
           columns={[
             { key: "code", header: "Código", render: (row) => row.code },
             { key: "name", header: "Nome", render: (row) => row.name },

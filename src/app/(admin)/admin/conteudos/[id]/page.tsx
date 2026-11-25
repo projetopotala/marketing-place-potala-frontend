@@ -1,4 +1,4 @@
-import { ContentDetailView } from "@/components/admin/modules/ContentDetailView";
+import { ConnectedDetailView } from "@/components/admin/modules/ConnectedDetailView";
 
 export default async function AdminContentDetailPage({
   params,
@@ -6,5 +6,5 @@ export default async function AdminContentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <ContentDetailView id={id} />;
+  return <ConnectedDetailView key={id} id={id} resource="conteudos" />;
 }

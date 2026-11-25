@@ -1,4 +1,4 @@
-import { SellerDetailView } from "@/components/admin/modules/SellerDetailView";
+import { ConnectedDetailView } from "@/components/admin/modules/ConnectedDetailView";
 
 export default async function AdminSellerDetailPage({
   params,
@@ -6,5 +6,5 @@ export default async function AdminSellerDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <SellerDetailView id={id} />;
+  return <ConnectedDetailView key={id} id={id} resource="vendedores" />;
 }

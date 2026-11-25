@@ -220,10 +220,8 @@ function CheckoutForm() {
     try {
       // Preço/título/SKU nunca vêm daqui — o servidor resolve tudo a
       // partir de productId/variantId (ver CreateCheckoutDto no
-      // orders-service). Sem chave de idempotência nesta v1: um retry de
-      // rede cria um pedido novo — o guard `submitting` acima evita o caso
-      // mais comum (duplo clique), mas não uma falha de rede a meio do
-      // caminho (gap conhecido, ver status do projeto).
+      // orders-service). A mesma tentativa reutiliza a chave de idempotência
+      // enquanto o payload não muda e a página permanece montada.
       const checkoutInput = {
         paymentMethod: payment === 'pix' ? 'PIX' as const : 'CARD' as const,
         items: items.map((item) => ({

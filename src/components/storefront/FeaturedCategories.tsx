@@ -37,7 +37,9 @@ function normalizeKey(name: string): string {
 }
 
 export async function FeaturedCategories() {
-  const categories = await listPublicCategories();
+  const categories = (await listPublicCategories()).filter(
+    category => normalizeKey(category.slug) !== "cursos" && normalizeKey(category.name) !== "cursos",
+  );
 
   if (categories.length === 0) {
     return null;

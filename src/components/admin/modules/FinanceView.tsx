@@ -15,6 +15,8 @@ import { AdminMetricCard, AdminMetricsRow } from "@/components/admin/shared/Admi
 import { AdminDataTable, sharedStyles } from "@/components/admin/shared/AdminDataTable";
 import { AdminStatusBadge, AdminEmptyState } from "@/components/admin/shared/AdminStatusBadge";
 import { FinancialPolicies } from './FinancialPolicies';
+import { buildApiOverview } from "@/features/admin/selectors/apiOverview";
+import { SalesPerformanceChart } from "../charts/SalesPerformanceChart";
 
 /**
  * Real financeiro admin, via GET /admin/orders (orders-service, novo este
@@ -70,6 +72,9 @@ interface Summary {
 }
 
 function buildSummary(orders: AdminSellerOrder[]): Summary {
+  const paidOrders = new Set<string>();
+  const pendingOrders = new Set<string>();
+  const cancelledOrders = new Set<string>();
   const summary: Summary = {
     paidCents: 0,
     paidCount: 0,
@@ -83,17 +88,17 @@ function buildSummary(orders: AdminSellerOrder[]): Summary {
     const status = sellerOrder.order.status;
     if (PAID_STATUSES.includes(status)) {
       summary.paidCents += sellerOrder.subtotalCents;
-      summary.paidCount += 1;
+      paidOrders.add(sellerOrder.orderId);
     } else if (status === "PENDING_PAYMENT") {
       summary.pendingCents += sellerOrder.subtotalCents;
-      summary.pendingCount += 1;
+      pendingOrders.add(sellerOrder.orderId);
     } else if (status === "CANCELLED") {
       summary.cancelledCents += sellerOrder.subtotalCents;
-      summary.cancelledCount += 1;
+      cancelledOrders.add(sellerOrder.orderId);
     }
   }
 
-  return summary;
+  return { ...summary, paidCount: paidOrders.size, pendingCount: pendingOrders.size, cancelledCount: cancelledOrders.size };
 }
 
 export function FinanceView() {
@@ -105,6 +110,8 @@ export function FinanceView() {
   const [sellers, setSellers] = useState<AdminSeller[] | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+  const [days, setDays] = useState(30);
+  const [summaryHasMore, setSummaryHasMore] = useState(false);
 
   // Tabela: paginada por cursor, mesmo padrão de SellersView/SellerFinanceView.
   const [tableOrders, setTableOrders] = useState<AdminSellerOrder[] | null>(null);
@@ -123,6 +130,7 @@ export function FinanceView() {
       .then(([ordersPage, sellersPage]) => {
         if (cancelled) return;
         setSummaryOrders(ordersPage.items);
+        setSummaryHasMore(ordersPage.pageInfo.hasNextPage);
         setSellers(sellersPage.items);
       })
       .catch((err) => {
@@ -187,15 +195,15 @@ export function FinanceView() {
     if (!summaryOrders) return null;
     return buildSummary(summaryOrders);
   }, [summaryOrders]);
+  const overview = useMemo(() => buildApiOverview(summaryOrders ?? [], [], [], days), [summaryOrders, days]);
 
   return (
     <div className={sharedStyles.stack}>
-      <p>Gateway indisponível. Líquidos e taxas representam snapshots do pedido; repasses e estornos não foram executados.</p>
-      <FinancialPolicies />
       <AdminPageHeader
         title="Financeiro"
         description={`Valores brutos das linhas, antes dos descontos, por status de pagamento (até os ${SUMMARY_LIMIT} pedidos mais recentes).`}
       />
+      <p className={sharedStyles.subtitle}>Gateway indisponível. Líquidos e taxas são previsões dos pedidos; repasses e estornos não foram executados. {summaryHasMore && "Há mais registros fora do resumo; navegue pela tabela para consultá-los."}</p>
 
       {isSummaryLoading ? (
         <p role="status" aria-live="polite">
@@ -229,6 +237,10 @@ export function FinanceView() {
         </AdminMetricsRow>
       )}
 
+      <div className={sharedStyles.grid2}>
+        <section className={sharedStyles.panel}><h2 className={sharedStyles.panelTitle}>Evolução da receita bruta</h2><label className={sharedStyles.field}>Período<select value={days} onChange={event => setDays(Number(event.target.value))}>{[7, 30, 90].map(value => <option key={value} value={value}>Últimos {value} dias</option>)}</select></label>{summaryOrders ? <SalesPerformanceChart data={overview.sales} /> : <AdminEmptyState title="Receita indisponível" />}<p className={sharedStyles.subtitle}>Valores brutos pagos antes dos descontos, no recorte de até 100 registros.</p></section>
+        <section className={sharedStyles.panel}><h2 className={sharedStyles.panelTitle}>Formas de pagamento</h2><AdminEmptyState title="Distribuição indisponível" description="Os registros consultados não informam o meio de pagamento." /><h2 className={sharedStyles.panelTitle}>Vendedores por valor bruto</h2>{overview.sellerTotals.map(row => <p key={row.id}>{sellerName(row.id)} · {formatMoney(row.value)}</p>)}</section>
+      </div>
       {isTableLoading ? (
         <p role="status">Carregando transações…</p>
       ) : tableError ? (
@@ -237,6 +249,7 @@ export function FinanceView() {
         <AdminDataTable
           caption="Transações de todas as lojas"
           rows={tableOrders ?? []}
+          tools={{ describe: row => ({ Pedido: row.order.orderNumber, Loja: sellerName(row.sellerId), Status: ORDER_STATUS_LABEL[row.order.status], Bruto: formatMoney(row.subtotalCents), Comissão: row.financialSnapshot ? formatMoney(row.commissionCents) : "—", "Líquido previsto": row.financialSnapshot ? formatMoney(row.sellerNetCents) : "—", Data: formatDate(row.createdAt) }) }}
           columns={[
             { key: "order", header: "Pedido", render: (row) => row.order.orderNumber },
             { key: "seller", header: "Loja", render: (row) => sellerName(row.sellerId) },
@@ -292,6 +305,7 @@ export function FinanceView() {
           Próxima
         </button>
       </div>
+      <FinancialPolicies />
     </div>
   );
 }

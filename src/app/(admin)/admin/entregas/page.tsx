@@ -1,5 +1,5 @@
-import { DeliveriesView } from "@/components/admin/modules/DeliveriesView";
+import { OrdersView } from "@/components/admin/modules/OrdersView";
 
-export default function AdminShipmentsPage() {
-  return <DeliveriesView />;
+export default function Page() {
+  return <OrdersView deliveries />;
 }

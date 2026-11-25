@@ -190,9 +190,8 @@ export interface OrderResponse {
  * aprovado por si só (embora o gateway mock desta v1 sempre aprove) — o
  * `status` da resposta é que diz o estado real.
  *
- * Sem chave de idempotência: um retry de rede neste endpoint cria um
- * pedido novo, distinto. O chamador deve evitar disparar duas vezes
- * enquanto uma chamada está em voo (ver `submitting` em checkout/page.tsx).
+ * Envia Idempotency-Key. O chamador deve reutilizar a chave para repetir
+ * a mesma tentativa; o backend rejeita uma chave reutilizada com outro payload.
  */
 export async function checkout(input: CheckoutInput, idempotencyKey: string = crypto.randomUUID()): Promise<OrderResponse> {
   const result = await apiFetch<OrderResponse>("/orders/checkout", {
@@ -215,7 +214,9 @@ export async function payActivityEnrollment(enrollmentId: string): Promise<Order
 export interface FinancialPolicy {id: string; scope: 'PLATFORM' | 'SELLER' | 'CATEGORY' | 'PRODUCT'; scopeId: string | null; version: number; commissionBps: number; gatewayFeeBps: number; fixedFeeCents: number; createdAt: string}
 export async function listFinancialPolicies() { return await apiFetch<FinancialPolicy[]>('/admin/finance/policies') ?? []; }
 export async function createFinancialPolicy(input: Omit<FinancialPolicy, 'id' | 'version' | 'createdAt' | 'scopeId'> & {scopeId?: string}) {
-  return apiFetch<FinancialPolicy>('/admin/finance/policies', {method: 'POST', body: JSON.stringify(input)});
+  const result = await apiFetch<FinancialPolicy>('/admin/finance/policies', {method: 'POST', body: JSON.stringify(input)});
+  if (!result) throw new Error('O servidor não confirmou a criação da política financeira.');
+  return result;
 }
 
 export interface PageInfo {

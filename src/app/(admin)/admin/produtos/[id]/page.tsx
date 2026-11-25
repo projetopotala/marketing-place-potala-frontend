@@ -1,4 +1,4 @@
-import { ProductDetailView } from "@/components/admin/modules/ProductDetailView";
+import { ConnectedDetailView } from "@/components/admin/modules/ConnectedDetailView";
 
 export default async function AdminProductDetailPage({
   params,
@@ -6,5 +6,5 @@ export default async function AdminProductDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <ProductDetailView id={id} />;
+  return <ConnectedDetailView key={id} id={id} resource="produtos" />;
 }

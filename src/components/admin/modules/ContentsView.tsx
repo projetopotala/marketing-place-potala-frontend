@@ -226,7 +226,7 @@ export function ContentsView() {
     <div className={sharedStyles.stack}>
       <AdminPageHeader
         title="Conteúdos / Cursos"
-        description="Cadastre e modere conteúdos do marketplace (v1: sem módulos/aulas, sem matrícula de aluno)."
+        description="Cadastre, organize e modere conteúdos e cursos do marketplace."
         actions={
           <button type="button" className={sharedStyles.btn} onClick={openCreate}>
             Novo conteúdo
@@ -242,6 +242,7 @@ export function ContentsView() {
         <AdminDataTable
           caption="Lista de conteúdos"
           rows={contents ?? []}
+          tools={{ describe: row => ({ Título: row.title, Instrutor: row.instructor, Categoria: row.category, Status: ADMIN_CONTENT_STATUS_LABEL[row.status], Preço: formatMoney(row.priceCents), Descrição: row.description, Moderação: row.moderationNote ?? "—" }) }}
           columns={[
             { key: "title", header: "Título", render: (row) => row.title },
             { key: "instructor", header: "Instrutor", render: (row) => row.instructor },

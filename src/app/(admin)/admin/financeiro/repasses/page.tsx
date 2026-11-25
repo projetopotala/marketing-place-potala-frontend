@@ -1,5 +1,5 @@
-import { AdminUnavailableView } from "@/components/admin/modules/AdminUnavailableView";
+import { ConnectedPayoutsView } from "@/components/admin/modules/ConnectedPayoutsView";
 
-export default function AdminPayoutsPage() {
-  return <AdminUnavailableView title="Repasses" description="Acompanhamento e liquidação de valores devidos aos vendedores." missingCapability="O backend atual não possui modelo nem endpoints administrativos de repasse. Esta página não cria, marca ou simula pagamentos." />;
+export default function Page() {
+  return <ConnectedPayoutsView />;
 }

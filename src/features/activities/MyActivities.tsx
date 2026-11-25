@@ -95,7 +95,7 @@ export function MyActivities({
         <Link href="/minha-conta/inscricoes">Inscrições</Link>
         <Link href="/minha-conta/agenda">Agenda</Link>
         <Link href="/minha-conta/downloads">Materiais</Link>
-        <Link href="/cursos">Explorar cursos</Link>
+        <Link href="/eventos">Explorar eventos</Link>
       </nav>
       {error && (
         <p className={s.error} role="alert">

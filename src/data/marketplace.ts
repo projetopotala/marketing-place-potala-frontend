@@ -34,7 +34,6 @@ export const BRAND = {
 
 /** Links da barra superior (desktop). Categorias do disclosure vêm de HEADER_CATEGORIES. */
 export const NAV_CATEGORIES: NavCategory[] = [
-  {id:"cursos",label:"Cursos",href:"/cursos"},
   {id:"eventos",label:"Eventos",href:"/eventos"},
   { id: "categorias", label: "Categorias", href: "/catalogo", hasMenu: true },
   ...HEADER_CATEGORIES.map((category) => ({
@@ -681,7 +680,6 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
     links: [
       { label: "Meus Pedidos", href: "/minha-conta/pedidos" },
       { label: "Lista de Desejos", href: "/minha-conta/favoritos" },
-      { label: "Cursos e Conteúdos", href: "/categoria/cursos" },
       { label: "Meus Endereços", href: "/minha-conta/enderecos" },
       { label: "Minha Conta", href: "/minha-conta" },
     ],

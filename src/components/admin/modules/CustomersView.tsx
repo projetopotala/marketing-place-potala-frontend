@@ -128,7 +128,7 @@ export function CustomersView() {
     <div className={sharedStyles.stack}>
       <AdminPageHeader
         title="Clientes"
-        description="Bloqueie ou desbloqueie contas, direto do identity-service."
+        description="Consulte clientes e gerencie o acesso às contas."
       />
 
       {isLoading ? (
@@ -141,6 +141,7 @@ export function CustomersView() {
         <AdminDataTable
           caption="Lista de clientes"
           rows={customers ?? []}
+          tools={{ describe: row => ({ Cliente: row.fullName ?? "—", Email: row.email, Telefone: row.phone ?? "—", Status: ADMIN_CUSTOMER_STATUS_LABEL[row.status], Cadastro: formatDate(row.createdAt) }) }}
           columns={[
             {
               key: "name",

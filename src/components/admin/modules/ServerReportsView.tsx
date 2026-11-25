@@ -2,6 +2,10 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api/client";
 import { API_BASE_URL } from "@/lib/api/config";
+import { ChartNoAxesCombined } from "lucide-react";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
+import { AdminMetricCard, AdminMetricsRow } from "../shared/AdminMetricCard";
+import { sharedStyles as styles } from "../shared/AdminDataTable";
 const REPORT_GROUPS = [
   { label: "Produtos e estoque", keys: ["products", "stock"] },
   { label: "Vendedores", keys: ["vendors"] },
@@ -77,9 +81,10 @@ export function ServerReportsView() {
     }
   }
   return (
-    <section style={{ padding: 24, display: "grid", gap: 16, maxWidth: 850 }}>
-      <h1>Relatórios</h1>
-      <p>
+    <section className={styles.stack}>
+      <AdminPageHeader title="Relatórios" description="Selecione o tipo e o período para exportar os registros do marketplace." icon={<ChartNoAxesCombined size={18} />} />
+      <AdminMetricsRow><AdminMetricCard label="Relatórios disponíveis" value={String(views.length)} /><AdminMetricCard label="Limite por exportação" value="10.000" hint="Refine o período para volumes maiores" /><AdminMetricCard label="Formatos" value="CSV / XLSX" /></AdminMetricsRow>
+      <p className={styles.subtitle}>
         Exportação dos registros reais, filtrados no servidor. Até 10.000
         linhas por arquivo; refine o período para volumes maiores. Valores
         financeiros em centavos. Vendas incluem comissão e taxa do gateway.
@@ -88,7 +93,8 @@ export function ServerReportsView() {
         Clientes usam apenas identificador e dados de situação cadastral.
       </p>
       {error && <p role="alert">{error}</p>}
-      <label>
+      <div className={styles.filterBar}>
+      <label className={styles.field}>
         Visão{" "}
         <select
           value={view}
@@ -111,7 +117,7 @@ export function ServerReportsView() {
           ))}
         </select>
       </label>
-      <label>
+      <label className={styles.field}>
         De{" "}
         <input
           type="datetime-local"
@@ -119,7 +125,7 @@ export function ServerReportsView() {
           onChange={(e) => setFrom(e.target.value)}
         />
       </label>
-      <label>
+      <label className={styles.field}>
         Até{" "}
         <input
           type="datetime-local"
@@ -127,7 +133,7 @@ export function ServerReportsView() {
           onChange={(e) => setTo(e.target.value)}
         />
       </label>
-      <label>
+      <label className={styles.field}>
         ID da loja (opcional){" "}
         <input
           disabled={!views.find((v) => v.key === view)?.scoped}
@@ -135,20 +141,23 @@ export function ServerReportsView() {
           onChange={(e) => setSellerId(e.target.value)}
         />
       </label>
-      <label>
+      <label className={styles.field}>
         Status técnico (opcional){" "}
         <input value={status} onChange={(e) => setStatus(e.target.value)} />
       </label>
-      <div>
+      </div>
+      <div className={styles.actions}>
         <button
           disabled={busy || !views.length}
           onClick={() => download("csv")}
+          className={styles.btnSecondary}
         >
           Exportar CSV
         </button>{" "}
         <button
           disabled={busy || !views.length}
           onClick={() => download("xlsx")}
+          className={styles.btnSecondary}
         >
           Exportar XLSX
         </button>

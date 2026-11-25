@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { createFinancialPolicy, listFinancialPolicies, type FinancialPolicy } from '@/lib/api/orders';
+import { ApiError } from '@/lib/api/client';
 
 export function FinancialPolicies() {
   const [policies, setPolicies] = useState<FinancialPolicy[]>([]);
@@ -11,9 +12,10 @@ export function FinancialPolicies() {
   const [fixed, setFixed] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
-  useEffect(() => { let active = true; listFinancialPolicies().then(p => { if (active) setPolicies(p); }).catch(e => { if (active) setMessage(e instanceof Error ? e.message : 'Falha ao carregar políticas.'); }); return () => { active = false; }; }, []);
+  const [available, setAvailable] = useState(false);
+  useEffect(() => { let active = true; listFinancialPolicies().then(p => { if (active) { setPolicies(p); setAvailable(true); } }).catch(e => { if (active) setMessage(e instanceof ApiError && (e.status === 404 || e.status === 501) ? 'Políticas financeiras indisponíveis nesta versão do servidor. Nenhuma comissão ou taxa pode ser configurada por este painel.' : e instanceof Error ? e.message : 'Falha ao carregar políticas.'); }); return () => { active = false; }; }, []);
   async function save(event: FormEvent) {
-    event.preventDefault(); setSaving(true); setMessage('');
+    event.preventDefault(); if (!available || saving) return; setSaving(true); setMessage('');
     try {
       await createFinancialPolicy({scope, ...(scope === 'PLATFORM' ? {} : {scopeId}), commissionBps: Number(commission), gatewayFeeBps: Number(fee), fixedFeeCents: Number(fixed)});
       setPolicies(await listFinancialPolicies()); setMessage('Nova versão aprovada para os próximos pedidos.');
@@ -29,7 +31,7 @@ export function FinancialPolicies() {
       <label>Comissão (bps; 100 = 1%) <input type="number" min="0" max="10000" step="1" required value={commission} onChange={e => setCommission(e.target.value)} /></label>
       <label>Taxa do gateway (bps) <input type="number" min="0" max="10000" step="1" required value={fee} onChange={e => setFee(e.target.value)} /></label>
       <label>Taxa fixa (centavos por linha) <input type="number" min="0" max="2147483647" step="1" required value={fixed} onChange={e => setFixed(e.target.value)} /></label>
-      <button disabled={saving}>{saving ? 'Salvando…' : 'Aprovar nova versão'}</button>
+      <button disabled={saving || !available}>{saving ? 'Salvando…' : 'Aprovar nova versão'}</button>
     </form>
     {message && <p role="status">{message}</p>}
     <ul>{policies.slice(0, 20).map(p => <li key={p.id}>{p.scope} {p.scopeId ?? 'Geral'} · versão {p.version} · comissão {p.commissionBps} bps · gateway {p.gatewayFeeBps} bps + {p.fixedFeeCents} centavos/linha</li>)}</ul>

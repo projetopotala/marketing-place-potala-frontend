@@ -61,7 +61,6 @@ export function ActivityList({ kind }: { kind?: ActivityKind }) {
             : "Atividades recorrentes"}
       </h1>
       <nav>
-        <Link href="/cursos">Cursos</Link>
         <Link href="/eventos">Eventos</Link>
         <Link href="/atividades">Atividades recorrentes</Link>
         <Link href="/minha-conta/inscricoes">Minhas inscrições</Link>
@@ -135,7 +134,7 @@ export function ActivityDetail({ id }: { id: string }) {
   }
   return (
     <main className={s.page}>
-      <Link href="/cursos">Explorar atividades</Link>
+      <Link href="/eventos">Explorar atividades</Link>
       {error && (
         <p role="alert" className={s.error}>
           {error}
