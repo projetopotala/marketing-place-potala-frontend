@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api/client";
+import { ApiError, apiFetch } from "@/lib/api/client";
 import { API_BASE_URL } from "@/lib/api/config";
 import { ChartNoAxesCombined } from "lucide-react";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -40,10 +40,13 @@ export function ServerReportsView() {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     apiFetch<typeof views>("/admin/reports")
-      .then((v) => setViews(v ?? []))
-      .catch((e) => setError(e.message));
+      .then((v) => { setViews(v ?? []); setView(v?.[0]?.key ?? ""); })
+      .catch((e) => setError(e instanceof ApiError && [404, 501].includes(e.status)
+        ? "A API de relatórios ainda não está disponível. A exportação está desabilitada."
+        : e.message));
   }, []);
   async function download(format: string) {
+    if (!views.some(item => item.key === view)) return;
     setBusy(true);
     setError("");
     try {

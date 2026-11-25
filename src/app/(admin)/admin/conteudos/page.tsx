@@ -1,5 +1,5 @@
-import { ContentsView } from "@/components/admin/modules/ContentsView";
+import { redirect } from "next/navigation";
 
 export default function AdminContentsPage() {
-  return <ContentsView />;
+  redirect("/admin");
 }

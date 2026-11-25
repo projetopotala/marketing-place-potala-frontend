@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api/client";
+import { ApiError, apiFetch } from "@/lib/api/client";
 import Link from "next/link";
 import styles from "./notifications.module.css";
 type Notice = {
@@ -18,7 +18,9 @@ export function NotificationsInbox() {
   useEffect(() => {
     apiFetch<Notice[]>("/notifications")
       .then((data) => setItems(data || []))
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(e instanceof ApiError && [404, 501].includes(e.status)
+        ? "O serviço de notificações ainda não está disponível."
+        : e.message))
       .finally(() => setLoading(false));
   }, []);
   async function read(id: string) {
@@ -39,7 +41,7 @@ export function NotificationsInbox() {
       {loading ? (
         <p>Carregando…</p>
       ) : (
-        !items.length && <p>Nenhuma notificação.</p>
+        !error && !items.length && <p>Nenhuma notificação.</p>
       )}
       {items.map((item) => (
         <article

@@ -1,10 +1,5 @@
-import { ConnectedDetailView } from "@/components/admin/modules/ConnectedDetailView";
+import { redirect } from "next/navigation";
 
-export default async function AdminContentDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  return <ConnectedDetailView key={id} id={id} resource="conteudos" />;
+export default function Page() {
+  redirect("/admin");
 }

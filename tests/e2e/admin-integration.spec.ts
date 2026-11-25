@@ -86,7 +86,7 @@ test("rotas restauradas e módulos atuais continuam navegáveis", async ({ page 
   await fixture(page);
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  for (const [route, title] of [["entregas", "Entregas"], ["financeiro/integracoes", "Integrações de pagamento"], ["financeiro/repasses", "Repasses"], ["configuracoes", "Configurações"], ["relatorios", "Relatórios"], ["clientes", "Clientes"], ["conteudos", "Conteúdos / Cursos"], ["cupons", "Cupons"], ["financeiro", "Financeiro"], ["vendedores", "Vendedores"]]) {
+  for (const [route, title] of [["entregas", "Entregas"], ["financeiro/integracoes", "Integrações de pagamento"], ["financeiro/repasses", "Repasses"], ["configuracoes", "Configurações"], ["relatorios", "Relatórios"], ["clientes", "Clientes"], ["cupons", "Cupons"], ["financeiro", "Financeiro"], ["vendedores", "Vendedores"]]) {
     await page.goto(`/admin/${route}`);
     await expect(page.getByRole("heading", { name: title, exact: true, level: 1 })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), { message: `overflow: ${route}` }).toBe(true);
@@ -150,4 +150,27 @@ test("detalhe encontra registro em outra página sem recorrer ao banco demo", as
   await page.goto("/admin/produtos/product-real");
   await expect(page.getByRole("heading", { name: "Produto da API", exact: true })).toBeVisible();
   expect(cursors).toContain("cursor-opaco");
+});
+
+test("cursos redirecionam sem consultar conteúdos", async ({ page }) => {
+  await fixture(page);
+  const requests: string[] = [];
+  page.on("request", request => requests.push(request.url()));
+  for (const path of ["/admin/conteudos", "/admin/conteudos/content-real"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/admin$/);
+  }
+  expect(requests.some(url => url.includes("/api/v1/admin/contents"))).toBe(false);
+});
+
+test("APIs ausentes não aparecem como listas vazias", async ({ page }) => {
+  await fixture(page);
+  await page.route("**/api/v1/notifications", route => route.fulfill({ status: 404, json: { message: "Not Found" } }));
+  await page.goto("/admin/notificacoes");
+  await expect(page.locator('p[role="alert"]')).toContainText("serviço de notificações ainda não está disponível");
+  await expect(page.getByText("Nenhuma notificação.")).toHaveCount(0);
+  await page.route("**/api/v1/admin/reports", route => route.fulfill({ status: 404, json: { message: "Not Found" } }));
+  await page.goto("/admin/relatorios");
+  await expect(page.locator('p[role="alert"]')).toContainText("API de relatórios ainda não está disponível");
+  await expect(page.getByRole("button", { name: "Exportar CSV" })).toBeDisabled();
 });
