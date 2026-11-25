@@ -1704,15 +1704,15 @@ img {
 /* Tema areia das áreas pública, comprador e vendedor.
    A presença destes elementos delimita o tema e preserva o admin e seus portais. */
 body:has(#topo, #seller-sidebar) {
-  --potala-navy-950: #e5b77f;
-  --potala-navy-900: #d5c897;
-  --potala-navy-850: #e9bd86;
-  --potala-navy-800: #f3e3c7;
-  --potala-navy-750: #fff5e3;
-  --potala-navy-700: #eebf8b;
-  --potala-bg: #d5c897;
-  --potala-bg-secondary: #e9bd86;
-  --potala-panel: #f3e3c7;
+  --potala-navy-950: #d5c897;
+  --potala-navy-900: #f3ecd9;
+  --potala-navy-850: #e9dfbf;
+  --potala-navy-800: #faf5e9;
+  --potala-navy-750: #fffdf7;
+  --potala-navy-700: #e5d8b5;
+  --potala-bg: #f3ecd9;
+  --potala-bg-secondary: #e5d8b5;
+  --potala-panel: #faf5e9;
   --potala-text-primary: #35332f;
   --potala-text-secondary: #62513d;
   --potala-text: #35332f;
@@ -1722,6 +1722,11 @@ body:has(#topo, #seller-sidebar) {
   --potala-gold-light: #72501d;
   --potala-button: #e9b94e;
   --potala-button-light: #f3cf70;
+  --background: #f3ecd9;
+  --card: #faf5e9;
+  --popover: #fffdf7;
+  --muted: #e9dfbf;
+  --secondary: #e5d8b5;
   --potala-border: rgb(114 80 29 / 28%);
   --potala-border-strong: rgb(114 80 29 / 55%);
   --shadow-panel: 0 8px 24px rgb(93 67 28 / 12%);
@@ -1733,13 +1738,20 @@ body:has(#topo, #seller-sidebar) {
 }
 
 body:has(#topo) #topo {
-  --potala-bg: #e9bd86;
-  --potala-bg-secondary: #e5b77f;
-  --potala-panel: #fff5e3;
+  --potala-bg: #f5f0e6;
+  --potala-bg-secondary: #ede5d7;
+  --potala-panel: #fffdf7;
+  background-color: #f5f0e6;
 }
 
 body:has(#topo) .potala-announcement {
-  background-color: #e5b77f;
+  background-color: #ede5d7;
+}
+
+body:has(#topo) #topo button {
+  background-color: var(--potala-button);
+  color: #35332f;
+  border-color: #a77a25;
 }
 
 body:has(#topo) :is(.potala-btn-primary, .newsletter-section__submit) {
